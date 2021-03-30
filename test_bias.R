@@ -12,6 +12,7 @@ config <- read_yaml('~/.config/datarobot/drconfig.yaml')
 
 filename <- 'data/DR_Demo_LendingClub_Guardrails_Fairness.csv.zip'
 target <- 'is_bad'
+leakage <- 'loan_status'
 preferable_outcome <- 'No'
 fairness_metric <- 'predictionBalance'
 # One of proportionalParity, equalParity, predictionBalance, trueFavorableAndUnfavorableRateParity or FavorableAndUnfavorablePredictiveValueParity
@@ -27,12 +28,22 @@ protected <- read_lines('protected_features.txt')
 # data <- read_csv(filename)
 project <- SetupProject(filename, 'Bias Demo')
 
+featurelists <- ListFeaturelists(project)
+informative <- keep(featurelists, function(x) grepl('Informative', x$name))
+# remove protected features, and predefined leakage
+no_protected <- informative %>%
+  extract2(1) %>%
+  extract2('features') %>%
+  setdiff(c(target, leakage, protected))
+features <- CreateFeaturelist(project, 'Protected Removed', no_protected)
+
 # project settings, note bias and fairness is currently only supported through the REST API
 # for documentation, see:
 # https://app.datarobot.com/apidocs/autodoc/api_reference.html#patch--api-v2-projects-(projectId)-aim-
 settings <- list(
   target = target,
-  mode = 'manual',
+  mode = 'quick',
+  featurelistId = features$featurelistId,
   protectedFeatures = as.list(protected),
   preferableTargetValue = preferable_outcome,
   fairnessMetricsSet = fairness_metric
@@ -46,27 +57,6 @@ response <- PATCH(
   encode = 'json'
 )
 UpdateProject(project, workerCount = 'max')
-# wait for target leakage detection to complete
-while(GetProjectStatus(project)$stage != 'modeling') {
-  Sys.sleep(5)
-}
-
-# get informative features
-featurelists <- ListFeaturelists(project)
-informative <- keep(featurelists, function(x) grepl('Leakage Removed', x$name))
-# if no leakage detected
-if(length(informative) == 0) {
-  informative <- keep(featurelists, function(x) grepl('Informative', x$name))
-}
-# remove protected features
-no_protected <- informative %>%
-  extract2(1) %>%
-  extract2('features') %>%
-  setdiff(c(target, protected))
-features <- CreateFeaturelist(project, 'Protected Removed', no_protected)
-
-# run autopilot on cleaned featurelist
-StartNewAutoPilot(project, features$featurelistId)
 WaitForAutopilot(project)
 
 
