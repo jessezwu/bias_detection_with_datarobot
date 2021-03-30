@@ -132,7 +132,8 @@ ggplot(data = profitCurve, aes(x = threshold, y = profit)) +
   ggtitle('Profit Curve') +
   scale_y_continuous(labels=scales::dollar_format())
 
-# TO DO: get the accuracy using the optimal threshold for profit
+# TO DO: get the accuracy (confusion matrix) using the optimal threshold for profit
+rocCurve = GetRocCurve(model, DataPartition$VALIDATION, fallbackToParentInsights = TRUE)
 
 # TO DO: calculate the fairness metrics using the optimal threshold for profit
 
