@@ -86,11 +86,29 @@ CreatePayoffMatrix = function (project, matrix_name = 'new payoff matrix',
 # truePositiveValue = 0        # no bad loan, no loss
 # trueNegativeValue = 1500     # good loan written, $1500 profit made
 # falsePositiveValue = 0       # no good loan written, opportunity cost $1500 in profit, but net payoff is zero
-# falseNegativeValue = -5000   # bad loan written, $10000 in loan writeoffs
+# falseNegativeValue = -5000   # bad loan written, $10000 in loan write-offs
 
-payoff_matrix = CreatePayoffMatrix(project, 'payoff test 2', 0, 1500, 0, -10000)
+payoff_matrix = CreatePayoffMatrix(project, 'payoff matrix', 0, 1500, 0, -10000)
 
+# download the stacked predictions on the training data
+# we will have to manually calculate the profit, accuracy, and bias metrics
+
+predictions <- ListTrainingPredictions(project)
+model <- GetModel(best_model$projectId, best_model$modelId)
+predictionId <- sapply(predictions, function(x) 
+  if(x$modelId == best_model$modelId && x$dataSubset == 'all') return(x$id) else return(NULL))
+if (length(predictionId) == 0) {
+  jobID = RequestTrainingPredictions(model, dataSubset = DataSubset$All)
+  WaitForJobToComplete(project, jobID)
+  predictions <- ListTrainingPredictions(project)
+  predictionId <- sapply(predictions, function(x) 
+    if(x$modelId == best_model$modelId && x$dataSubset == 'all') return(x$id) else return(NULL))
+}
+trainingPredictions <- GetTrainingPredictions(projectId, predictionId)
+
+# TO DO: merge the training predictions with the training data
 # TO DO: get the profit curve
+# TO DO: get the accuracy
 # TO DO: get the optimal threshold for profit
 
 
