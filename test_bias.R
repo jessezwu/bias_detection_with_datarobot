@@ -3,6 +3,8 @@ library(tidyverse)
 library(magrittr)
 library(httr)
 library(yaml)
+library(ggplot2)
+library(scales)
 
 ################################################################################
 # Settings
@@ -106,11 +108,33 @@ if (length(predictionId) == 0) {
 }
 trainingPredictions <- GetTrainingPredictions(projectId, predictionId)
 
-# TO DO: merge the training predictions with the training data
-# TO DO: get the profit curve
-# TO DO: get the accuracy
-# TO DO: get the optimal threshold for profit
+# merge the training predictions with the training data
+trainingData = read_csv(filename)
+mergedData = bind_cols(trainingData, trainingPredictions)
 
+# get the profit curve
+thresholds = 0.001 * 0:1000
+profit = sapply(thresholds, function(x) {
+  # TO DO: find the positive class for this project and don't hard code it in the calculation
+  temp = tibble(target = mergedData[, target], probability = mergedData$class_Yes) %>%
+    mutate(payoff = 
+             payoff_matrix$truePositiveValue * ifelse(probability > x & target == 'Yes', 1, 0) +
+             payoff_matrix$trueNegativeValue * ifelse(probability <= x & target != 'Yes', 1, 0) +
+             payoff_matrix$falsePositiveValue * ifelse(probability > x & target != 'Yes', 1, 0) +
+             payoff_matrix$falseNegativeValue * ifelse(probability <= x & target == 'Yes', 1, 0)
+             )
+    return(sum(temp$payoff))
+})
+profitCurve = tibble(threshold = thresholds, profit = profit)
+optimalThresholdForProfit = profitCurve$threshold[which.max(profitCurve$profit)]
+ggplot(data = profitCurve, aes(x = threshold, y = profit)) + 
+  geom_line() +
+  ggtitle('Profit Curve') +
+  scale_y_continuous(labels=scales::dollar_format())
+
+# TO DO: get the accuracy using the optimal threshold for profit
+
+# TO DO: calculate the fairness metrics using the optimal threshold for profit
 
 # TODO: look at cross class data disparity for any proxies
 # Does this API call exist yet?
