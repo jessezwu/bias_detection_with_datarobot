@@ -71,13 +71,38 @@ WaitForAutopilot(project)
 
 
 ###########################################################################################
-# find direct bias
+# measure unfair bias in the base model without protected features
 ###########################################################################################
 
 # take top model
 best_model <- GetModelRecommendation(project, 'Recommended for Deployment')
 
-# TO DO: add a cost matrix so that we get a profit curve and the "optimal" threshold
+# write an R function to create a payoff matrix
+CreatePayoffMatrix = function (project, matrix_name = 'new payoff matrix', 
+                               TP_value = 1, TN_value = 1, FP_value = 1, FN_value = 1) 
+{
+  projectId <- datarobot:::ValidateProject(project)
+  routeString <- datarobot:::UrlJoin("projects", projectId, "payoffMatrices")
+  body = list(name = matrix_name, 
+                 truePositiveValue = TP_value,
+                 trueNegativeValue = TN_value,
+                 falsePositiveValue = FP_value,
+                 falseNegativeValue = FN_value)
+  rawReturn <- datarobot:::DataRobotPOST(routeString, body = body, returnRawResponse = TRUE)
+  payoff_matrix = content(rawReturn)
+  return(payoff_matrix)
+}
+
+# truePositiveValue = 0        # no bad loan, no loss
+# trueNegativeValue = 1500     # good loan written, $1500 profit made
+# falsePositiveValue = 0       # no good loan written, opportunity cost $1500 in profit, but net payoff is zero
+# falseNegativeValue = -5000   # bad loan written, $10000 in loan writeoffs
+
+payoff_matrix = CreatePayoffMatrix(project, 'payoff test 2', 0, 1500, 0, -10000)
+
+# TO DO: get the profit curve
+# TO DO: get the optimal threshold for profit
+
 
 # TODO: look at cross class data disparity for any proxies
 # Does this API call exist yet?
