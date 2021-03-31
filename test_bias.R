@@ -276,8 +276,70 @@ for (featureName in protected) {
   print(plt)
 }
 
-# TO DO: calculate and plot true favorable rate parity
+# calculate and plot true favorable rate parity
+getFavorableRateParity = function(featureName, thresh) {
+  temp = mergedData %>%
+    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+    filter(!!as.name(target) == preferable_outcome) %>%
+    group_by(!!as.name(featureName), positiveResult) %>%
+    summarise(nRows = n(), .groups = 'drop') %>%
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows) %>%
+    mutate(nTot = Pos + Neg) %>%
+    mutate(absolute_favorable_rate_parity = Pos / nTot)
+  temp = temp %>%
+    mutate(maxRate = max(temp$absolute_favorable_rate_parity)) %>%
+    mutate(relative_favorable_rate_parity = absolute_favorable_rate_parity / maxRate) %>%
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_favorable_rate_parity < 0.1)) %>%
+    mutate(fairness = ifelse(relative_favorable_rate_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
+    mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
+  return(temp %>% select(!!as.name(featureName), absolute_favorable_rate_parity, 
+                         relative_favorable_rate_parity, fairness))
+}
+for (featureName in protected) {
+  pp = getFavorableRateParity(featureName, optimalThresholdForProfit)
+  labels = c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
+  colours = c('blue','red', 'grey')[labels %in% pp$fairness]
+  plt = ggplot(data = pp, aes(x = get(featureName), y = absolute_favorable_rate_parity, fill = fairness)) +
+    geom_col() + 
+    ggtitle('Favorable Rate Parity') +
+    xlab(featureName) +
+    ylab('Absolute Favorable Rate Parity') +
+    scale_fill_manual(values = colours)
+  print(plt)
+}
+
 # TO DO: calculate and plot true unfavorable rate parity
+getUnfavorableRateParity = function(featureName, thresh) {
+  temp = mergedData %>%
+    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+    filter(!!as.name(target) != preferable_outcome) %>%
+    group_by(!!as.name(featureName), positiveResult) %>%
+    summarise(nRows = n(), .groups = 'drop') %>%
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows) %>%
+    mutate(nTot = Pos + Neg) %>%
+    mutate(absolute_unfavorable_rate_parity = Neg / nTot)
+  temp = temp %>%
+    mutate(maxRate = max(temp$absolute_unfavorable_rate_parity)) %>%
+    mutate(relative_unfavorable_rate_parity = absolute_unfavorable_rate_parity / maxRate) %>%
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_unfavorable_rate_parity < 0.1)) %>%
+    mutate(fairness = ifelse(relative_unfavorable_rate_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
+    mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
+  return(temp %>% select(!!as.name(featureName), absolute_unfavorable_rate_parity, 
+                         relative_unfavorable_rate_parity, fairness))
+}
+for (featureName in protected) {
+  pp = getUnfavorableRateParity(featureName, optimalThresholdForProfit)
+  labels = c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
+  colours = c('blue','red', 'grey')[labels %in% pp$fairness]
+  plt = ggplot(data = pp, aes(x = get(featureName), y = absolute_unfavorable_rate_parity, fill = fairness)) +
+    geom_col() + 
+    ggtitle('Unfavorable Rate Parity') +
+    xlab(featureName) +
+    ylab('Absolute Unfavorable Rate Parity') +
+    scale_fill_manual(values = colours)
+  print(plt)
+}
+
 # TO DO: calculate and plot favorable predictive value parity
 # TO DO: calculate and plot unfavorable predictive value parity
 
