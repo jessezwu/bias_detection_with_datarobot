@@ -106,7 +106,7 @@ if (length(predictionId) == 0) {
   predictionId <- sapply(predictions, function(x) 
     if(x$modelId == best_model$modelId && x$dataSubset == 'all') return(x$id) else return(NULL))
 }
-trainingPredictions <- GetTrainingPredictions(projectId, predictionId)
+trainingPredictions <- GetTrainingPredictions(project, predictionId)
 
 # merge the training predictions with the training data
 trainingData = read_csv(filename)
@@ -132,10 +132,62 @@ ggplot(data = profitCurve, aes(x = threshold, y = profit)) +
   ggtitle('Profit Curve') +
   scale_y_continuous(labels=scales::dollar_format())
 
-# TO DO: get the accuracy (confusion matrix) using the optimal threshold for profit
+# get the accuracy (confusion matrix) using the optimal threshold for profit
 rocCurve = GetRocCurve(model, DataPartition$VALIDATION, fallbackToParentInsights = TRUE)
 
+# 
+
 # TO DO: calculate the fairness metrics using the optimal threshold for profit
+# https://app.datarobot.com/docs/modeling/investigate/bias/bias-ref.html#proportional-parity
+
+getClassificationAccuracy = function(thresh) {
+  temp = tibble(target = mergedData[, target], probability = mergedData$class_Yes) %>%
+    mutate(confusion = ifelse(probability > thresh & target == 'Yes', 'TP', '')) %>%
+    mutate(confusion = ifelse(probability <= thresh & target != 'Yes', 'TN', confusion)) %>%
+    mutate(confusion = ifelse(probability > thresh & target != 'Yes', 'FP', confusion)) %>%
+    mutate(confusion = ifelse(probability <= thresh & target == 'Yes', 'FN', confusion))
+  return(unlist(temp$confusion))
+}
+
+mergedData$confusionQuadrant = getClassificationAccuracy(optimalThresholdForProfit)
+
+# calculate and plot proportional parity
+getProportionParity = function(featureName, thresh) {
+  temp = mergedData %>%
+    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+    group_by(!!as.name(featureName), positiveResult) %>%
+    summarise(nRows = n(), .groups = 'drop') %>%
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows) %>%
+    mutate(absolute_proportional_parity = Pos / (Pos + Neg))
+  temp = temp %>%
+    mutate(maxRate = max(temp$absolute_proportional_parity)) %>%
+    mutate(relative_proportional_parity = absolute_proportional_parity / maxRate) %>%
+    mutate(nTot = Neg + Pos) %>%
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & absolute_proportional_parity < 0.1)) %>%
+    mutate(fairness = ifelse(relative_proportional_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
+    mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
+  return(temp %>% select(!!as.name(featureName), absolute_proportional_parity, 
+                         relative_proportional_parity, fairness))
+}
+for (featureName in protected) {
+  pp = getProportionParity(featureName, optimalThresholdForProfit)
+  plt = ggplot(data = pp, aes(x = get(featureName), y = absolute_proportional_parity, fill = fairness)) +
+            geom_col() + 
+            ggtitle('Proportional Parity') +
+            xlab(featureName) +
+            ylab('Absolute Proportional Parity') +
+            scale_fill_manual(values = c('blue','red', 'grey'))
+  print(plt)
+}
+
+# TO DO: calculate and plot equal parity
+# TO DO: calculate and plot favorable class balance
+# TO DO: calculate and plot unfavorable class balance
+# TO DO: calculate and plot true favorable rate parity
+# TO DO: calculate and plot true unfavorable rate parity
+# TO DO: calculate and plot favorable predictive value parity
+# TO DO: calculate and plot unfavorable predictive value parity
+
 
 # TODO: look at cross class data disparity for any proxies
 # Does this API call exist yet?
@@ -186,3 +238,9 @@ rocCurve = GetRocCurve(model, DataPartition$VALIDATION, fallbackToParentInsights
 # TO DO: plot the relationship between the profit curve vs. unfair bias metrics
 # TO DO: create what-if scenarios and show that this approach creates disparate treatment
 # TO DO: plot the relationship between group proportional outcomes vs. group accuracy
+
+###########################################################################################
+# remove bias 5: reweighting
+###########################################################################################
+# TO DO: replicate this methodology
+# https://towardsdatascience.com/reweighing-the-adult-dataset-to-make-it-discrimination-free-44668c9379e8
