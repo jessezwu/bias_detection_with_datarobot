@@ -308,7 +308,7 @@ for (featureName in protected) {
   print(plt)
 }
 
-# TO DO: calculate and plot true unfavorable rate parity
+# calculate and plot true unfavorable rate parity
 getUnfavorableRateParity = function(featureName, thresh) {
   temp = mergedData %>%
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
@@ -340,9 +340,71 @@ for (featureName in protected) {
   print(plt)
 }
 
-# TO DO: calculate and plot favorable predictive value parity
-# TO DO: calculate and plot unfavorable predictive value parity
+# calculate and plot favorable predictive value parity
+getFavorablePredictiveValueParity = function(featureName, thresh) {
+  temp = mergedData %>%
+    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+    filter(positiveResult == 'Pos') %>%
+    mutate(positiveTarget = ifelse(!!as.name(target) == preferable_outcome, 'Pos', 'Neg')) %>%
+    group_by(!!as.name(featureName), positiveTarget) %>%
+    summarise(nRows = n(), .groups = 'drop') %>%
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveTarget, values_from = nRows) %>%
+    mutate(nTot = Pos + Neg) %>%
+    mutate(absolute_favorable_predictive_value_parity = Pos / nTot)
+  temp = temp %>%
+    mutate(maxRate = max(temp$absolute_favorable_predictive_value_parity)) %>%
+    mutate(relative_favorable_predictive_value_parity = absolute_favorable_predictive_value_parity / maxRate) %>%
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_favorable_predictive_value_parity < 0.1)) %>%
+    mutate(fairness = ifelse(relative_favorable_predictive_value_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
+    mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
+  return(temp %>% select(!!as.name(featureName), absolute_favorable_predictive_value_parity, 
+                         relative_favorable_predictive_value_parity, fairness))
+}
+for (featureName in protected) {
+  pp = getFavorablePredictiveValueParity(featureName, optimalThresholdForProfit)
+  labels = c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
+  colours = c('blue','red', 'grey')[labels %in% pp$fairness]
+  plt = ggplot(data = pp, aes(x = get(featureName), y = absolute_favorable_predictive_value_parity, fill = fairness)) +
+    geom_col() + 
+    ggtitle('Favorable Predictive Value Parity') +
+    xlab(featureName) +
+    ylab('Absolute Favorable Predictive Value Parity') +
+    scale_fill_manual(values = colours)
+  print(plt)
+}
 
+# TO DO: calculate and plot unfavorable predictive value parity
+getUnfavorablePredictiveValueParity = function(featureName, thresh) {
+  temp = mergedData %>%
+    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+    filter(positiveResult != 'Pos') %>%
+    mutate(positiveTarget = ifelse(!!as.name(target) == preferable_outcome, 'Pos', 'Neg')) %>%
+    group_by(!!as.name(featureName), positiveTarget) %>%
+    summarise(nRows = n(), .groups = 'drop') %>%
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveTarget, values_from = nRows) %>%
+    mutate(nTot = Pos + Neg) %>%
+    mutate(absolute_unfavorable_predictive_value_parity = Neg / nTot)
+  temp = temp %>%
+    mutate(maxRate = max(temp$absolute_unfavorable_predictive_value_parity)) %>%
+    mutate(relative_unfavorable_predictive_value_parity = absolute_unfavorable_predictive_value_parity / maxRate) %>%
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_unfavorable_predictive_value_parity < 0.1)) %>%
+    mutate(fairness = ifelse(relative_unfavorable_predictive_value_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
+    mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
+  return(temp %>% select(!!as.name(featureName), absolute_unfavorable_predictive_value_parity, 
+                         relative_unfavorable_predictive_value_parity, fairness))
+}
+for (featureName in protected) {
+  pp = getUnfavorablePredictiveValueParity(featureName, optimalThresholdForProfit)
+  labels = c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
+  colours = c('blue','red', 'grey')[labels %in% pp$fairness]
+  plt = ggplot(data = pp, aes(x = get(featureName), y = absolute_unfavorable_predictive_value_parity, fill = fairness)) +
+    geom_col() + 
+    ggtitle('Unfavorable Predictive Value Parity') +
+    xlab(featureName) +
+    ylab('Absolute Unfavorable Predictive Value Parity') +
+    scale_fill_manual(values = colours)
+  print(plt)
+}
 
 # TODO: look at cross class data disparity for any proxies
 # Does this API call exist yet?
