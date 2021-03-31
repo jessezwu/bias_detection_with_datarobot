@@ -131,6 +131,8 @@ ggplot(data = profitCurve, aes(x = threshold, y = profit)) +
   geom_line() +
   ggtitle('Profit Curve') +
   scale_y_continuous(labels=scales::dollar_format())
+mergedData = mergedData %>%
+  mutate(positiveResult = ifelse(class_Yes <= optimalThresholdForProfit, 'Pos', 'Neg'))
 
 # get the accuracy (confusion matrix) using the optimal threshold for profit
 rocCurve = GetRocCurve(model, DataPartition$VALIDATION, fallbackToParentInsights = TRUE)
@@ -171,18 +173,109 @@ getProportionParity = function(featureName, thresh) {
 }
 for (featureName in protected) {
   pp = getProportionParity(featureName, optimalThresholdForProfit)
+  labels = c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
+  colours = c('blue','red', 'grey')[labels %in% pp$fairness]
   plt = ggplot(data = pp, aes(x = get(featureName), y = absolute_proportional_parity, fill = fairness)) +
             geom_col() + 
             ggtitle('Proportional Parity') +
             xlab(featureName) +
             ylab('Absolute Proportional Parity') +
-            scale_fill_manual(values = c('blue','red', 'grey'))
+            scale_fill_manual(values = colours)
   print(plt)
 }
 
-# TO DO: calculate and plot equal parity
-# TO DO: calculate and plot favorable class balance
-# TO DO: calculate and plot unfavorable class balance
+# calculate and plot equal parity
+getEqualParity = function(featureName, thresh) {
+  temp = mergedData %>%
+    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+    group_by(!!as.name(featureName), positiveResult) %>%
+    summarise(nRows = n(), .groups = 'drop') %>%
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows) %>%
+    mutate(absolute_equal_parity = Pos)
+  temp = temp %>%
+    mutate(maxRate = max(temp$absolute_equal_parity)) %>%
+    mutate(relative_equal_parity = absolute_equal_parity / maxRate) %>%
+    mutate(nTot = Neg + Pos) %>%
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & absolute_equal_parity < 0.1)) %>%
+    mutate(fairness = ifelse(relative_equal_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
+    mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
+  return(temp %>% select(!!as.name(featureName), absolute_equal_parity, 
+                         relative_equal_parity, fairness))
+}
+for (featureName in protected) {
+  pp = getEqualParity(featureName, optimalThresholdForProfit)
+  labels = c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
+  colours = c('blue','red', 'grey')[labels %in% pp$fairness]
+  plt = ggplot(data = pp, aes(x = get(featureName), y = absolute_equal_parity, fill = fairness)) +
+    geom_col() + 
+    ggtitle('Equal Parity') +
+    xlab(featureName) +
+    ylab('Absolute Equal Parity') +
+    scale_fill_manual(values = colours) +
+    scale_y_continuous(labels=scales::comma_format())
+  print(plt)
+}
+
+# calculate and plot favorable class balance
+getFavorableClassBalance = function(featureName, thresh) {
+  temp = mergedData %>%
+    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+    filter(positiveResult == 'Pos') %>%
+    group_by(!!as.name(featureName)) %>%
+    summarise(nTot = n(), aveScore = mean(class_Yes), .groups = 'drop') %>%
+    mutate(absolute_favorable_class_balance = aveScore)
+  temp = temp %>%
+    mutate(maxRate = max(temp$absolute_favorable_class_balance)) %>%
+    mutate(relative_favorable_class_balance = absolute_favorable_class_balance / maxRate) %>%
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_favorable_class_balance < 0.1)) %>%
+    mutate(fairness = ifelse(relative_favorable_class_balance >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
+    mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
+  return(temp %>% select(!!as.name(featureName), absolute_favorable_class_balance, 
+                         relative_favorable_class_balance, fairness))
+}
+for (featureName in protected) {
+  pp = getFavorableClassBalance(featureName, optimalThresholdForProfit)
+  labels = c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
+  colours = c('blue','red', 'grey')[labels %in% pp$fairness]
+  plt = ggplot(data = pp, aes(x = get(featureName), y = absolute_favorable_class_balance, fill = fairness)) +
+    geom_col() + 
+    ggtitle('Favorable Class Balance') +
+    xlab(featureName) +
+    ylab('Absolute Favorable Class Balance') +
+    scale_fill_manual(values = colours)
+  print(plt)
+}
+
+# calculate and plot favorable class balance
+getUnfavorableClassBalance = function(featureName, thresh) {
+  temp = mergedData %>%
+    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+    filter(positiveResult == 'Neg') %>%
+    group_by(!!as.name(featureName)) %>%
+    summarise(nTot = n(), aveScore = mean(class_Yes), .groups = 'drop') %>%
+    mutate(absolute_unfavorable_class_balance = aveScore)
+  temp = temp %>%
+    mutate(maxRate = max(temp$absolute_unfavorable_class_balance)) %>%
+    mutate(relative_unfavorable_class_balance = absolute_unfavorable_class_balance / maxRate) %>%
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_unfavorable_class_balance < 0.1)) %>%
+    mutate(fairness = ifelse(relative_unfavorable_class_balance >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
+    mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
+  return(temp %>% select(!!as.name(featureName), absolute_unfavorable_class_balance, 
+                         relative_unfavorable_class_balance, fairness))
+}
+for (featureName in protected) {
+  pp = getUnfavorableClassBalance(featureName, optimalThresholdForProfit)
+  labels = c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
+  colours = c('blue','red', 'grey')[labels %in% pp$fairness]
+  plt = ggplot(data = pp, aes(x = get(featureName), y = absolute_unfavorable_class_balance, fill = fairness)) +
+    geom_col() + 
+    ggtitle('Unfavorable Class Balance') +
+    xlab(featureName) +
+    ylab('Absolute Unfavorable Class Balance') +
+    scale_fill_manual(values = colours)
+  print(plt)
+}
+
 # TO DO: calculate and plot true favorable rate parity
 # TO DO: calculate and plot true unfavorable rate parity
 # TO DO: calculate and plot favorable predictive value parity
