@@ -2,7 +2,6 @@ library(datarobot)
 library(tidyverse)
 library(magrittr)
 library(httr)
-library(yaml)
 library(ggplot2)
 library(scales)
 library(creditmodel)
@@ -13,8 +12,6 @@ library(ggrepel)
 ################################################################################
 # Settings
 ################################################################################
-
-config <- read_yaml('~/.config/datarobot/drconfig.yaml')
 
 filename <- 'data/DR_Demo_LendingClub_Guardrails_Fairness.csv.zip'
 target <- 'is_bad'
@@ -56,15 +53,14 @@ settings <- list(
 )
 
 # run project
-response <- PATCH(
-  sprintf('%s/projects/%s/aim', config$endpoint, project$projectId),
-  add_headers(Authorization = sprintf('Bearer %s', config$token)),
+response <- datarobot:::DataRobotPATCH(
+  datarobot:::UrlJoin("projects", project$projectId, "aim"),
   body = settings,
-  encode = 'json'
+  encode = 'json',
+  returnRawResponse = TRUE
 )
 UpdateProject(project, workerCount = 'max')
 WaitForAutopilot(project)
-
 
 ###########################################################################################
 # measure unfair bias in the base model without protected features
