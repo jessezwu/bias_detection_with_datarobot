@@ -478,7 +478,6 @@ raw_features = unique(raw_features)
 ###########################################################################################
 
 # get cross-class data disparity for protected features
-protected_feature = 'gender'
 psi_scores = bind_rows(lapply(protected, function(protected_feature) {
   test_data = mergedData %>% 
     select(all_of(c(raw_features, target, protected_feature)))
