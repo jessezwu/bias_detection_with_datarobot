@@ -8,6 +8,7 @@ library(creditmodel)
 library(lubridate)
 library(anytime)
 library(ggrepel)
+library(ggwordcloud)
 
 ################################################################################
 # Settings
@@ -566,7 +567,93 @@ for (protected_feature in protected) {
   print(plt)
 }
 
-# TO DO: create separate DR projects that predict the protected features, then look at the feature impact, feature effects, and word cloud
+# create separate DR projects that predict the protected features, then look at the feature impact, feature effects, and word cloud
+indirect_projects = list()
+indirect_protected = list()
+for (protected_feature in protected) {
+  group_list = unique(unlist(mergedData %>% select(all_of(protected_feature))))
+  if (length(group_list) == 2) {
+    temp_data = mergedData %>% 
+      select(all_of(c(raw_features, protected_feature)))
+    prj = StartProject(dataSource = temp_data,
+                       projectName = paste0('Find indirect bias - ', protected_feature),
+                       target = protected_feature,
+                       mode = 'quick',
+                       workerCount = 'max')
+    i = 1 + length(indirect_projects)
+    indirect_projects[[i]] = prj
+  }
+  if (length(group_list) > 2) {
+    for (target_group in group_list) {
+      temp_data = mergedData %>% 
+        select(all_of(c(raw_features, protected_feature))) %>%
+        mutate(target_protected_group = ifelse(!!as.name(protected_feature) == target_group, target_group, 'all_others')) %>%
+        select(-all_of(protected_feature))
+        
+      prj = StartProject(dataSource = temp_data,
+                         projectName = paste0('Find indirect bias - ', protected_feature, ' - ', target_group),
+                         target = 'target_protected_group',
+                         positiveClass = target_group,
+                         mode = 'quick',
+                         workerCount = 'max')
+      i = 1 + length(indirect_projects)
+      indirect_projects[[i]] = prj
+      indirect_protected[[i]] = protected_feature
+    }
+  }
+}
+for (prj in indirect_projects) WaitForAutopilot(prj)
+
+# get insights from the projects we just built
+for (i in length(protected)) {
+  prj = indirect_projects[[i]]
+  protected_feature = indirect_protected[[i]]
+  #
+  # get the top model
+  indirect_leaderboard = as.data.frame(ListModels(prj))
+  indirect_top_model = GetModel(prj, head(indirect_leaderboard$modelId[! grepl('Blender', indirect_leaderboard$modelType)], 1))
+  #
+  # get the feature impact, identifying possible proxies
+  indirect_feature_impact = GetFeatureImpact(indirect_top_model)
+  indirect_feature_impact = indirect_feature_impact %>% mutate(featureName = factor(featureName, levels = rev(indirect_feature_impact$featureName)))
+  plt = ggplot(data = indirect_feature_impact, aes(x = featureName, y = impactNormalized)) +
+    geom_col() + 
+    coord_flip() + 
+    ggtitle('Feature Impact', subtitle = paste0('Potential proxies for: ', protected_feature)) +
+    xlab('Feature Name') +
+    ylab('Feature Impact')
+  print(plt)
+  #
+  # for each text feature show the wordcloud
+  indirect_text_models = indirect_leaderboard %>% filter(grepl('Auto-Tuned Word N-Gram Text Modeler', modelType))
+  indirect_text_models = indirect_text_models %>% filter(samplePct == max(indirect_text_models$samplePct))
+  positive_class = GetProject(prj$projectId)$positiveClass
+  for (modelID in indirect_text_models$modelId) {
+    text_model = GetModel(prj, modelID)
+    text_feature = gsub('Auto-Tuned Word N-Gram Text Modeler using token occurrences - ', '', text_model$modelType, fixed = TRUE)
+    indirect_wordcloud = GetWordCloud(prj, modelID, excludeStopWords = TRUE) %>%
+      mutate(weight = abs(coefficient) * count) %>%
+      arrange(desc(weight)) %>%
+      mutate(effect = ifelse(coefficient < -0.2, 'Negative', ifelse(coefficient > 0.2, 'Positive', 'Moderate'))) %>%
+      rename(ngram_count = count) %>%
+      mutate(colour_num = ifelse(effect == 'Negative', 1, ifelse(effect == 'Moderate', 2, 3))) %>%
+      top_n(125, weight)
+    colours = c('blue', 'grey', 'red')[sort(unique(indirect_wordcloud$colour_num))]
+    subtitle = paste0('Text feature = ', text_feature)
+    if (! is.null(positive_class) & length(positive_class) > 0)
+      subtitle = paste0(subtitle, '\nRed colour is ', positive_class)
+    set.seed(123)
+    plt = ggplot(data = indirect_wordcloud, aes(label = ngram, size = ngram_count, color = effect)) +
+      geom_text_wordcloud_area(area_corr_power = 1, shape = 'square', rm_outside = TRUE) +
+      #geom_text_wordcloud_area(area_corr_power = 1, rm_outside = TRUE) +
+      scale_size_area(max_size = 24) +
+      theme_minimal() +
+      scale_colour_manual(values = colours) +
+      ggtitle(paste0('Potential text proxies for: ', protected_feature), 
+              subtitle = subtitle)
+    print(plt)
+  }
+}
 
 ###########################################################################################
 # remove bias 1: remove indirect bias features
@@ -612,3 +699,10 @@ for (protected_feature in protected) {
 ###########################################################################################
 # TO DO: replicate this methodology
 # https://towardsdatascience.com/reweighing-the-adult-dataset-to-make-it-discrimination-free-44668c9379e8
+
+###########################################################################################
+# remove bias 6: rejection option-based classification
+###########################################################################################
+# TO DO: replicate this methodology
+# https://towardsdatascience.com/reducing-ai-bias-with-rejection-option-based-classification-54fefdb53c2e
+
