@@ -5,6 +5,10 @@ library(httr)
 library(yaml)
 library(ggplot2)
 library(scales)
+library(creditmodel)
+library(lubridate)
+library(anytime)
+library(ggrepel)
 
 ################################################################################
 # Settings
@@ -373,7 +377,7 @@ for (featureName in protected) {
   print(plt)
 }
 
-# TO DO: calculate and plot unfavorable predictive value parity
+# calculate and plot unfavorable predictive value parity
 getUnfavorablePredictiveValueParity = function(featureName, thresh) {
   temp = mergedData %>%
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
@@ -406,16 +410,168 @@ for (featureName in protected) {
   print(plt)
 }
 
-# TODO: look at cross class data disparity for any proxies
-# Does this API call exist yet?
+# get a list of the features used in our chosen model
+null.is.na = function(x) { return(ifelse(is.null(x), NA, x))}
+featureinfo.as.data.frame = function(x) {
+  result = tibble(
+    id = x$id,
+    name = x$name,
+    featureType = null.is.na(x$featureType),
+    importance = null.is.na(x$importance),
+    lowInformation = x$lowInformation,
+    targetLeakage = x$targetLeakage,
+    projectId = x$projectId,
+    uniqueCount = x$uniqueCount,
+    naCount = null.is.na(x$naCount),
+    min = null.is.na(x$min),
+    mean = null.is.na(x$mean),
+    median = null.is.na(x$median),
+    max = null.is.na(x$max),
+    stdDev = null.is.na(x$stdDev),
+    timeSeriesEligible = x$timeSeriesEligible,
+    timeSeriesEligibility = x$timeSeriesEligibility,
+    dateFormat = null.is.na(x$dateFormat),
+    timeUnit = null.is.na(x$timeUnit),
+    timeStep = null.is.na(x$timeStep)
+  )
+  if (! is.na(result$featureType[1])) {
+    if (result$featureType[1] == 'Date')
+      result = result %>%
+        mutate(
+          min = julian(ymd(min)),
+          mean = julian(ymd(mean)),
+          median = julian(ymd(median)),
+          max = julian(ymd(max)),
+          stdDev = as.numeric(gsub(' days', '', stdDev))
+        )
+    if (result$featureType[1] == 'Percentage')
+      result = result %>%
+        mutate(
+          min = as.numeric(gsub('%', '', min)),
+          mean = as.numeric(gsub('%', '', mean)),
+          median = as.numeric(gsub('%', '', median)),
+          max = as.numeric(gsub('%', '', max)),
+          stdDev = as.numeric(gsub('%', '', stdDev))
+        )
+  }
+  tibble::validate_tibble(result)
+  return(result)
+}
+featureinfolist.as.data.frame = function(x) {
+  return(bind_rows(lapply(x, featureinfo.as.data.frame)))
+}
+feature_list = GetFeaturelist(project, model$featurelistId)
+input_features = feature_list$features[! feature_list$features == target]
+
+# get the EDA
+eda_summary = ListFeatureInfo(project)
+eda_table = featureinfolist.as.data.frame(eda_summary)
+date_features = unname(unlist(eda_table %>% filter(featureType == 'Date') %>% select(name)))
+text_features = unname(unlist(eda_table %>% filter(featureType == 'Text') %>% select(name)))
+engineered_date_features = bind_rows(lapply(
+            c('Year', 'Month', 'Day', 'Hour'), 
+            function(x) return(tibble(raw = date_features, engineered = paste0(date_features, ' (', x, ')'), period = x)))) %>%
+        filter(engineered %in% input_features)
+raw_features = input_features
+for (r in seq_len(nrow(engineered_date_features)))
+  raw_features = gsub(engineered_date_features$engineered[r], engineered_date_features$raw[r], raw_features, fixed = TRUE)
+raw_features = unique(raw_features)
 
 ###########################################################################################
 # find indirect bias
 ###########################################################################################
 
-# TO DO: look for indirect discrimination
-# TO DO: get the feature association matrix
-# TO DO: create separate DR projects that predict the protected features, then look at the feature impact, feature effects, and world cloud
+# get cross-class data disparity for protected features
+protected_feature = 'gender'
+psi_scores = bind_rows(lapply(protected, function(protected_feature) {
+  test_data = mergedData %>% 
+    select(all_of(c(raw_features, target, protected_feature)))
+  for (r in seq_len(nrow(engineered_date_features))) {
+    if (engineered_date_features$period[r] == 'Year') test_data[, engineered_date_features$engineered[r]] = year(anydate(unname(unlist(test_data[, engineered_date_features$raw[r]]))))
+    if (engineered_date_features$period[r] == 'Month') test_data[, engineered_date_features$engineered[r]] = month(anydate(unname(unlist(test_data[, engineered_date_features$raw[r]]))))
+    if (engineered_date_features$period[r] == 'Day') test_data[, engineered_date_features$engineered[r]] = day(anydate(unname(unlist(test_data[, engineered_date_features$raw[r]]))))
+  }
+  group_levels = unique(unlist(test_data[, protected_feature]))
+  psi_scores = bind_rows(lapply(group_levels, function(group) {
+    test_data_1 = test_data %>% filter(!!as.name(protected_feature) == group)
+    test_data_2 = test_data %>% filter(!!as.name(protected_feature) != group)
+    psi_scores = get_psi_all(
+                    dat = test_data_1,
+                    dat_test = test_data_2,
+                    ex_cols = c(text_features, protected_feature),
+                    as_table = TRUE
+                  ) %>% 
+                  filter(! is.infinite(PSI_i)) %>%
+                  group_by(Feature) %>%
+                  summarise(PSI = sum(PSI_i), .groups = 'drop') %>%
+                  mutate(group_level = group) %>%
+                  relocate(group_level, .before = 1) %>%
+                  mutate(protected_feature = protected_feature) %>%
+                  relocate(protected_feature, .before = 1)
+    return(psi_scores)
+  }))
+  return(psi_scores)
+}))
+# get the feature impact
+feature_impact = GetFeatureImpact(model)
+
+# plot the results
+for (protected_feature in protected) {
+  group_levels = unique(unlist(mergedData[, protected_feature]))
+  for (protected_group in group_levels) {
+    plot_data = psi_scores %>% 
+                  filter(protected_feature == protected_feature & group_level == protected_group) %>%
+                  left_join(feature_impact %>% select(featureName, impactNormalized) %>% rename(Feature = featureName), by = 'Feature') %>%
+                  mutate(impactNormalized = ifelse(Feature == target, 1, impactNormalized)) %>%
+                  filter(! is.na(impactNormalized)) %>%
+                  mutate(Impact = ifelse(PSI <= 0.1, 'Low', ifelse(PSI <= 0.25, 'Moderate', 'Major'))) %>%
+                  mutate(Impact = factor(Impact, levels = c('Low', 'Moderate', 'Major')))
+    plt = ggplot(data = plot_data, aes(x = impactNormalized, y = PSI, colour = Impact, label = Feature)) +
+                  geom_point() + 
+                  geom_text_repel(size = 2.5) +
+                  scale_colour_manual(values = c('green2', 'yellow3', 'red')) +
+                  ggtitle('Cross-Class Data Disparity',
+                          subtitle = paste('Feature = ', protected_feature, '    Group = ', protected_group)) +
+                  xlab('Importance') +
+                  ylab('Data Disparity')
+    print(plt)
+  }
+}
+
+# get the feature association matrix
+feature_association = GetFeatureAssociationMatrix(project, associationType = 'association', metric = 'mutualInfo')
+#
+# show the 5 strongest feature associations for each protected feature
+for (protected_feature in protected) {
+  strengths = feature_association$strengths %>%
+    filter(feature1 == protected_feature | feature2 == protected_feature) %>%
+    arrange(desc(statistic))
+  strengths = strengths %>% 
+    top_n(5, statistic)
+  associated_features = sapply(seq_len(5), function(r) 
+    return(ifelse(strengths$feature1[r] == strengths$feature2[r] | strengths$feature2[r] == protected_feature, 
+                  strengths$feature1[r], strengths$feature2[r])))
+  strengths = feature_association$strengths %>%
+    filter(feature1 %in% associated_features & feature2 %in% associated_features) %>%
+    mutate(feature1 = factor(feature1, levels = associated_features)) %>%
+    mutate(feature2 = factor(feature2, levels = associated_features))
+  strengths2 = strengths %>%
+    rename(temp = feature1) %>%
+    rename(feature1 = feature2) %>%
+    rename(feature2 = temp) %>%
+    filter(feature1 != feature2)
+  strengths = bind_rows(list(strengths, strengths2)) %>%
+    rename(Association = statistic)
+  plt = ggplot(data = strengths, aes(x = feature1, y = feature2, fill = Association)) +
+    geom_tile() +
+    scale_fill_gradientn(colours = c('grey', 'green', 'yellow', 'red')) +
+    ggtitle('Feature Associations', subtitle = paste0('Protected Feature = ', protected_feature)) +
+    xlab('Feature Name') +
+    ylab('Feature Name')
+  print(plt)
+}
+
+# TO DO: create separate DR projects that predict the protected features, then look at the feature impact, feature effects, and word cloud
 
 ###########################################################################################
 # remove bias 1: remove indirect bias features
