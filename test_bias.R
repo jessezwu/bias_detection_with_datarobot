@@ -24,6 +24,8 @@ fairness_metric <- 'predictionBalance'
 # load in list of protected features
 protected <- read_lines('protected_features.txt')
 
+source('helper_functions.R')
+
 ################################################################################
 # detect and remove leakage as well as protected features
 ################################################################################
@@ -94,39 +96,17 @@ CreatePayoffMatrix = function (project, matrix_name = 'new payoff matrix',
 payoff_matrix = CreatePayoffMatrix(project, 'payoff matrix', 0, 1500, 0, -10000)
 
 # download the stacked predictions on the training data
-# we will have to manually calculate the profit, accuracy, and bias metrics
+# we will manually calculate the profit, accuracy, and bias metrics
 
-predictions <- ListTrainingPredictions(project)
 model <- GetModel(best_model$projectId, best_model$modelId)
-predictionId <- sapply(predictions, function(x) 
-  if(x$modelId == best_model$modelId && x$dataSubset == 'all') return(x$id) else return(NULL))
-if (length(predictionId) == 0) {
-  jobID = RequestTrainingPredictions(model, dataSubset = DataSubset$All)
-  WaitForJobToComplete(project, jobID)
-  predictions <- ListTrainingPredictions(project)
-  predictionId <- sapply(predictions, function(x) 
-    if(x$modelId == best_model$modelId && x$dataSubset == 'all') return(x$id) else return(NULL))
-}
-trainingPredictions <- GetTrainingPredictions(project, predictionId)
+trainingPredictions <- getStackedPredictions(project, model)
 
 # merge the training predictions with the training data
 trainingData = read_csv(filename)
 mergedData = bind_cols(trainingData, trainingPredictions)
 
 # get the profit curve
-thresholds = 0.001 * 0:1000
-profit = sapply(thresholds, function(x) {
-  # TO DO: find the positive class for this project and don't hard code it in the calculation
-  temp = tibble(target = mergedData[, target], probability = mergedData$class_Yes) %>%
-    mutate(payoff = 
-             payoff_matrix$truePositiveValue * ifelse(probability > x & target == 'Yes', 1, 0) +
-             payoff_matrix$trueNegativeValue * ifelse(probability <= x & target != 'Yes', 1, 0) +
-             payoff_matrix$falsePositiveValue * ifelse(probability > x & target != 'Yes', 1, 0) +
-             payoff_matrix$falseNegativeValue * ifelse(probability <= x & target == 'Yes', 1, 0)
-             )
-    return(sum(temp$payoff))
-})
-profitCurve = tibble(threshold = thresholds, profit = profit)
+profitCurve = getProfitCurve(mergedData, target, payoff_matrix)
 optimalThresholdForProfit = profitCurve$threshold[which.max(profitCurve$profit)]
 ggplot(data = profitCurve, aes(x = threshold, y = profit)) + 
   geom_line() +
@@ -140,7 +120,7 @@ rocCurve = GetRocCurve(model, DataPartition$VALIDATION, fallbackToParentInsights
 
 # 
 
-# TO DO: calculate the fairness metrics using the optimal threshold for profit
+# calculate the fairness metrics using the optimal threshold for profit
 # https://app.datarobot.com/docs/modeling/investigate/bias/bias-ref.html#proportional-parity
 
 getClassificationAccuracy = function(thresh) {
@@ -697,8 +677,25 @@ ggplot(data = leaderboard) +
   xlab('Feature List Name') +
   ylab('Holdout Log-Loss')
 
+# show the effect of removing zip_code upon profit curve
+training_predictions_V1 <- getStackedPredictions(project, model_V1)
+merged_data_V1 = bind_cols(trainingData, training_predictions_V1)
+profit_curve_V1 = getProfitCurve(merged_data_V1, target, payoff_matrix)
+optimal_threshold_profit_V1 = profit_curve_V1$threshold[which.max(profit_curve_V1$profit)]
+ggplot(data = profit_curve_V1, aes(x = threshold, y = profit)) + 
+  geom_line() +
+  ggtitle('Profit Curve - With Zip-Code Feature Removed') +
+  scale_y_continuous(labels=scales::dollar_format())
+merged_data_V1 = merged_data_V1 %>%
+  mutate(positiveResult = ifelse(class_Yes <= optimal_threshold_profit_V1, 'Pos', 'Neg'))
+ggplot(data = tibble(model = c('Original', 'Zip-Code Feature Removed'), 
+                     profit = c(max(profitCurve$profit), max(profit_curve_V1$profit)))) +
+  geom_col(aes(x = model, y = profit)) +
+  ggtitle('Profit Effect of Indirect Discrimination Removal') +
+  scale_y_continuous(labels=scales::dollar_format())
+
 # TO DO: show the effect of removing zip_code upon unfair bias metrics
-# TO DO: show the effect of removing zip_code upon profit curve
+# 
 
 ###########################################################################################
 # remove bias 2: vary global decision threshold
