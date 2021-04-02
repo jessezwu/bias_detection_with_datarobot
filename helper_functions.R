@@ -36,3 +36,15 @@ getProfitCurve = function(merged_data, target, payoff_matrix) {
   profitCurve = tibble(threshold = thresholds, profit = profit)
   return(profitCurve)
 }
+
+plotProfitCurveComparison = function(pc1, pc1_label, pc2, pc2_label) {
+  plot_data = bind_rows(list(pc1 %>% mutate(Model = pc1_label),
+                             pc2 %>% mutate(Model = pc2_label))) %>%
+    mutate(Model = factor(Model, levels = c(pc1_label, pc2_label)))
+  plt = ggplot(data = plot_data, aes(x = threshold, y = profit, colour = Model)) + 
+    geom_line() +
+    ggtitle('Profit Curve Comparison') +
+    scale_y_continuous(labels=scales::dollar_format()) +
+    scale_colour_manual(values = c('blue', 'red'))
+  print(plt)
+}

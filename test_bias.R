@@ -682,10 +682,6 @@ training_predictions_V1 <- getStackedPredictions(project, model_V1)
 merged_data_V1 = bind_cols(trainingData, training_predictions_V1)
 profit_curve_V1 = getProfitCurve(merged_data_V1, target, payoff_matrix)
 optimal_threshold_profit_V1 = profit_curve_V1$threshold[which.max(profit_curve_V1$profit)]
-ggplot(data = profit_curve_V1, aes(x = threshold, y = profit)) + 
-  geom_line() +
-  ggtitle('Profit Curve - With Zip-Code Feature Removed') +
-  scale_y_continuous(labels=scales::dollar_format())
 merged_data_V1 = merged_data_V1 %>%
   mutate(positiveResult = ifelse(class_Yes <= optimal_threshold_profit_V1, 'Pos', 'Neg'))
 ggplot(data = tibble(model = c('Original', 'Zip-Code Feature Removed'), 
@@ -693,6 +689,7 @@ ggplot(data = tibble(model = c('Original', 'Zip-Code Feature Removed'),
   geom_col(aes(x = model, y = profit)) +
   ggtitle('Profit Effect of Indirect Discrimination Removal') +
   scale_y_continuous(labels=scales::dollar_format())
+plotProfitCurveComparison(profitCurve, 'Original', profit_curve_V1, 'With Zip-Code Removed')
 
 # TO DO: show the effect of removing zip_code upon unfair bias metrics
 # 
