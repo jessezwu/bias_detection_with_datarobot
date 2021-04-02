@@ -661,13 +661,44 @@ for (i in seq_len(length(indirect_projects))) {
     print(plt)
   }
 }
- 
+
 ###########################################################################################
 # remove bias 1: remove indirect bias features
 ###########################################################################################
 
-# TO DO: show the effect of removing income upon unfair bias metrics
-# TO DO: show the effect of removing income upon profit curve
+raw_features_removal_V1 = raw_features[raw_features != 'zip_code']
+feature_list_V1 = CreateFeaturelist(project, 'remove bias V1', raw_features_removal_V1)
+UpdateProject(project, holdoutUnlocked = TRUE)
+jobID = RequestNewModel(
+  project,
+  model,
+  featurelist = feature_list_V1,
+  samplePct = model$samplePct
+)
+WaitForJobToComplete(project, jobID)
+model_V1 = GetModelFromJobId(project, jobID)
+
+# show the effect upon accuracy of removing zip_code 
+leaderboard = as.data.frame(ListModels(project)) %>%
+  filter(modelId %in% c(model$modelId, model_V1$modelId))
+leaderboard$crossValidationMetric = sapply(leaderboard$modelId, function(x) return(GetModel(project, x)$metrics$LogLoss$crossValidation))
+leaderboard$holdoutMetric = sapply(leaderboard$modelId, function(x) return(GetModel(project, x)$metrics$LogLoss$holdout))
+leaderboard = leaderboard %>% 
+  select(modelType, featurelistName, samplePct, validationMetric, crossValidationMetric, holdoutMetric) %>%
+  arrange(holdoutMetric)
+ggplot(data = leaderboard) +
+  geom_col(aes(x = featurelistName, y = crossValidationMetric)) +
+  ggtitle('Change in Accuracy After Indirect Bias Feature Removal') +
+  xlab('Feature List Name') +
+  ylab('Cross-Validation Log-Loss')
+ggplot(data = leaderboard) +
+  geom_col(aes(x = featurelistName, y = holdoutMetric)) +
+  ggtitle('Change in Accuracy After Indirect Bias Feature Removal') +
+  xlab('Feature List Name') +
+  ylab('Holdout Log-Loss')
+
+# TO DO: show the effect of removing zip_code upon unfair bias metrics
+# TO DO: show the effect of removing zip_code upon profit curve
 
 ###########################################################################################
 # remove bias 2: vary global decision threshold
