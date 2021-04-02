@@ -570,18 +570,23 @@ for (protected_feature in protected) {
 # create separate DR projects that predict the protected features, then look at the feature impact, feature effects, and word cloud
 indirect_projects = list()
 indirect_protected = list()
+indirect_group = list()
 for (protected_feature in protected) {
   group_list = unique(unlist(mergedData %>% select(all_of(protected_feature))))
   if (length(group_list) == 2) {
+    target_group = head(group_list, 1)
     temp_data = mergedData %>% 
       select(all_of(c(raw_features, protected_feature)))
     prj = StartProject(dataSource = temp_data,
                        projectName = paste0('Find indirect bias - ', protected_feature),
                        target = protected_feature,
+                       positiveClass = target_group,
                        mode = 'quick',
                        workerCount = 'max')
     i = 1 + length(indirect_projects)
     indirect_projects[[i]] = prj
+    indirect_protected[[i]] = protected_feature
+    indirect_group[[i]] = target_group
   }
   if (length(group_list) > 2) {
     for (target_group in group_list) {
@@ -599,15 +604,18 @@ for (protected_feature in protected) {
       i = 1 + length(indirect_projects)
       indirect_projects[[i]] = prj
       indirect_protected[[i]] = protected_feature
+      indirect_group[[i]] = target_group
     }
   }
 }
 for (prj in indirect_projects) WaitForAutopilot(prj)
 
 # get insights from the projects we just built
-for (i in length(protected)) {
+for (i in seq_len(length(indirect_projects))) {
   prj = indirect_projects[[i]]
   protected_feature = indirect_protected[[i]]
+  protected_group = indirect_group[[i]]
+  cat(paste0('Analysing feature: ', protected_feature, ' and group: ', protected_group, '\n'))
   #
   # get the top model
   indirect_leaderboard = as.data.frame(ListModels(prj))
@@ -619,7 +627,7 @@ for (i in length(protected)) {
   plt = ggplot(data = indirect_feature_impact, aes(x = featureName, y = impactNormalized)) +
     geom_col() + 
     coord_flip() + 
-    ggtitle('Feature Impact', subtitle = paste0('Potential proxies for: ', protected_feature)) +
+    ggtitle('Feature Impact', subtitle = paste0('Potential proxies for: ', protected_feature, ' and group: ', protected_group)) +
     xlab('Feature Name') +
     ylab('Feature Impact')
   print(plt)
@@ -637,15 +645,14 @@ for (i in length(protected)) {
       mutate(effect = ifelse(coefficient < -0.2, 'Negative', ifelse(coefficient > 0.2, 'Positive', 'Moderate'))) %>%
       rename(ngram_count = count) %>%
       mutate(colour_num = ifelse(effect == 'Negative', 1, ifelse(effect == 'Moderate', 2, 3))) %>%
-      top_n(125, weight)
+      top_n(80, weight)
     colours = c('blue', 'grey', 'red')[sort(unique(indirect_wordcloud$colour_num))]
     subtitle = paste0('Text feature = ', text_feature)
     if (! is.null(positive_class) & length(positive_class) > 0)
-      subtitle = paste0(subtitle, '\nRed colour is ', positive_class)
+      subtitle = paste0(subtitle, '\nRed colour is ', protected_group)
     set.seed(123)
     plt = ggplot(data = indirect_wordcloud, aes(label = ngram, size = ngram_count, color = effect)) +
       geom_text_wordcloud_area(area_corr_power = 1, shape = 'square', rm_outside = TRUE) +
-      #geom_text_wordcloud_area(area_corr_power = 1, rm_outside = TRUE) +
       scale_size_area(max_size = 24) +
       theme_minimal() +
       scale_colour_manual(values = colours) +
@@ -654,7 +661,7 @@ for (i in length(protected)) {
     print(plt)
   }
 }
-
+ 
 ###########################################################################################
 # remove bias 1: remove indirect bias features
 ###########################################################################################
