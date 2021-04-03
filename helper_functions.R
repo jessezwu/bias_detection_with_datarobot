@@ -55,13 +55,17 @@ getProportionParity = function(merged_data, featureName, thresh) {
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
     group_by(!!as.name(featureName), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows) %>%
-    mutate(absolute_proportional_parity = Pos / (Pos + Neg))
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows, values_fill = 0)
+  if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
+  if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
   temp = temp %>%
-    mutate(maxRate = max(temp$absolute_proportional_parity)) %>%
-    mutate(relative_proportional_parity = absolute_proportional_parity / maxRate) %>%
-    mutate(nTot = Neg + Pos) %>%
-    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & absolute_proportional_parity < 0.1)) %>%
+    mutate(nTot = Pos + Neg) %>%
+    mutate(absolute_proportional_parity = Pos / (Pos + Neg))
+  adj_max_rate = max(temp$absolute_proportional_parity[temp$nTot >= 1000 | temp$Pos > 10])
+  temp = temp %>%
+    mutate(maxRate = adj_max_rate) %>%
+    mutate(relative_proportional_parity = ifelse(maxRate <= 1e-50, 1, absolute_proportional_parity / maxRate)) %>%
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_proportional_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_proportional_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
   return(temp %>% select(!!as.name(featureName), absolute_proportional_parity, 
@@ -74,13 +78,17 @@ getEqualParity = function(merged_data, featureName, thresh) {
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
     group_by(!!as.name(featureName), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows) %>%
-    mutate(absolute_equal_parity = Pos)
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows, values_fill = 0)
+  if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
+  if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
   temp = temp %>%
-    mutate(maxRate = max(temp$absolute_equal_parity)) %>%
-    mutate(relative_equal_parity = absolute_equal_parity / maxRate) %>%
+    mutate(absolute_equal_parity = Pos)
     mutate(nTot = Neg + Pos) %>%
-    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & absolute_equal_parity < 0.1)) %>%
+  adj_max_rate = max(temp$absolute_equal_parity[temp$nTot >= 1000 | temp$Pos > 10])
+  temp = temp %>%
+    mutate(maxRate = adj_max_rate) %>%
+    mutate(relative_equal_parity = ifelse(maxRate <= 1e-50, 1, absolute_equal_parity / maxRate)) %>%
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_equal_parity < 0.1))
     mutate(fairness = ifelse(relative_equal_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
   return(temp %>% select(!!as.name(featureName), absolute_equal_parity, 
@@ -95,9 +103,13 @@ getFavorableClassBalance = function(merged_data, featureName, thresh) {
     group_by(!!as.name(featureName)) %>%
     summarise(nTot = n(), aveScore = mean(class_Yes), .groups = 'drop') %>%
     mutate(absolute_favorable_class_balance = aveScore)
+  adj_max_rate = 0
+  if (nrow(temp) > 0)
+    if (sum(temp$nTot >= 20) > 0)
+      adj_max_rate = max(temp$absolute_favorable_class_balance[temp$nTot >= 20])
   temp = temp %>%
-    mutate(maxRate = max(temp$absolute_favorable_class_balance)) %>%
-    mutate(relative_favorable_class_balance = absolute_favorable_class_balance / maxRate) %>%
+    mutate(maxRate = adj_max_rate) %>%
+    mutate(relative_favorable_class_balance = ifelse(maxRate < 1.e-50, NA, absolute_favorable_class_balance / maxRate)) %>%
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_favorable_class_balance < 0.1)) %>%
     mutate(fairness = ifelse(relative_favorable_class_balance >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
@@ -113,8 +125,12 @@ getUnfavorableClassBalance = function(merged_data, featureName, thresh) {
     group_by(!!as.name(featureName)) %>%
     summarise(nTot = n(), aveScore = mean(class_Yes), .groups = 'drop') %>%
     mutate(absolute_unfavorable_class_balance = aveScore)
+  adj_max_rate = 0
+  if (nrow(temp) > 0)
+    if (sum(temp$nTot >= 20) > 0)
+      adj_max_rate = max(temp$absolute_unfavorable_class_balance[temp$nTot >= 20])
   temp = temp %>%
-    mutate(maxRate = max(temp$absolute_unfavorable_class_balance)) %>%
+    mutate(maxRate = adj_max_rate) %>%
     mutate(relative_unfavorable_class_balance = absolute_unfavorable_class_balance / maxRate) %>%
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_unfavorable_class_balance < 0.1)) %>%
     mutate(fairness = ifelse(relative_unfavorable_class_balance >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
@@ -130,12 +146,19 @@ getFavorableRateParity = function(merged_data, featureName, thresh) {
     filter(!!as.name(target) == preferable_outcome) %>%
     group_by(!!as.name(featureName), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows) %>%
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows, values_fill = 0)
+  if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
+  if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
+  temp = temp %>%
     mutate(nTot = Pos + Neg) %>%
     mutate(absolute_favorable_rate_parity = Pos / nTot)
+  adj_max_rate = 0
+  if (nrow(temp) > 0)
+    if (sum(temp$nTot >= 1000 | temp$Pos >= 10) > 0)
+      adj_max_rate = max(temp$absolute_favorable_rate_parity[temp$nTot >= 1000 | temp$Pos >= 10])
   temp = temp %>%
-    mutate(maxRate = max(temp$absolute_favorable_rate_parity)) %>%
-    mutate(relative_favorable_rate_parity = absolute_favorable_rate_parity / maxRate) %>%
+    mutate(maxRate = adj_max_rate) %>%
+    mutate(relative_favorable_rate_parity = ifelse(maxRate <= 1e-50, NA, absolute_favorable_rate_parity / maxRate)) %>%
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_favorable_rate_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_favorable_rate_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
@@ -150,12 +173,19 @@ getUnfavorableRateParity = function(merged_data, featureName, thresh) {
     filter(!!as.name(target) != preferable_outcome) %>%
     group_by(!!as.name(featureName), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows) %>%
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows, values_fill = 0)
+  if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
+  if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
+  temp = temp %>%
     mutate(nTot = Pos + Neg) %>%
     mutate(absolute_unfavorable_rate_parity = Neg / nTot)
+  adj_max_rate = 0
+  if (nrow(temp) > 0)
+    if (sum(temp$nTot >= 1000 | temp$Neg >= 10) > 0)
+      adj_max_rate = max(temp$absolute_unfavorable_rate_parity[temp$nTot >= 1000 | temp$Neg >= 10])
   temp = temp %>%
-    mutate(maxRate = max(temp$absolute_unfavorable_rate_parity)) %>%
-    mutate(relative_unfavorable_rate_parity = absolute_unfavorable_rate_parity / maxRate) %>%
+    mutate(maxRate = adj_max_rate) %>%
+    mutate(relative_unfavorable_rate_parity = ifelse(maxRate <= 1e-50, NA, absolute_unfavorable_rate_parity / maxRate)) %>%
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_unfavorable_rate_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_unfavorable_rate_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
@@ -171,12 +201,19 @@ getFavorablePredictiveValueParity = function(merged_data, featureName, thresh) {
     mutate(positiveTarget = ifelse(!!as.name(target) == preferable_outcome, 'Pos', 'Neg')) %>%
     group_by(!!as.name(featureName), positiveTarget) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveTarget, values_from = nRows) %>%
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveTarget, values_from = nRows, values_fill = 0)
+  if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
+  if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
+  temp = temp %>%
     mutate(nTot = Pos + Neg) %>%
     mutate(absolute_favorable_predictive_value_parity = Pos / nTot)
+  adj_max_rate = 0
+  if (nrow(temp) > 0)
+    if (sum(temp$nTot >= 1000 | temp$Pos > 10) > 0)
+      adj_max_rate = max(temp$absolute_favorable_predictive_value_parity[temp$nTot >= 1000 | temp$Pos > 10])
   temp = temp %>%
-    mutate(maxRate = max(temp$absolute_favorable_predictive_value_parity)) %>%
-    mutate(relative_favorable_predictive_value_parity = absolute_favorable_predictive_value_parity / maxRate) %>%
+    mutate(maxRate = adj_max_rate) %>%
+    mutate(relative_favorable_predictive_value_parity = ifelse(maxRate <= 1e-50, NA, absolute_favorable_predictive_value_parity / maxRate)) %>%
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_favorable_predictive_value_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_favorable_predictive_value_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
@@ -192,12 +229,19 @@ getUnfavorablePredictiveValueParity = function(merged_data, featureName, thresh)
     mutate(positiveTarget = ifelse(!!as.name(target) == preferable_outcome, 'Pos', 'Neg')) %>%
     group_by(!!as.name(featureName), positiveTarget) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveTarget, values_from = nRows) %>%
-    mutate(nTot = Pos + Neg) %>%
-    mutate(absolute_unfavorable_predictive_value_parity = Neg / nTot)
+    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveTarget, values_from = nRows, values_fill = 0)
+  if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
+  if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
   temp = temp %>%
-    mutate(maxRate = max(temp$absolute_unfavorable_predictive_value_parity)) %>%
-    mutate(relative_unfavorable_predictive_value_parity = absolute_unfavorable_predictive_value_parity / maxRate) %>%
+      mutate(nTot = Pos + Neg) %>%
+      mutate(absolute_unfavorable_predictive_value_parity = Neg / nTot)
+  adj_max_rate = 0
+  if (nrow(temp) > 0)
+    if (sum(temp$nTot >= 1000 | temp$Pos > 10) > 0)
+      adj_max_rate = max(temp$absolute_unfavorable_predictive_value_parity[temp$nTot >= 1000 | temp$Pos > 10])
+  temp = temp %>%
+    mutate(maxRate = adj_max_rate) %>%
+    mutate(relative_unfavorable_predictive_value_parity = ifelse(maxRate <= 1e-50, NA, absolute_unfavorable_predictive_value_parity / maxRate)) %>%
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_unfavorable_predictive_value_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_unfavorable_predictive_value_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
@@ -347,3 +391,49 @@ plotUnfavorablePredictiveValueParityComparison = function(dat1, label1, dat2, la
   plotBiasMetricComparison(dat1, label1, dat2, label2, title, metric)
 }
 
+# summarise the bias metrics across a range of thresholds
+biasMetricFunctions = c('getProportionParity',
+                        'getEqualParity',
+                        'getFavorableClassBalance',
+                        'getUnfavorableClassBalance',
+                        'getFavorableRateParity',
+                        'getUnfavorableRateParity',
+                        'getFavorablePredictiveValueParity',
+                        'getUnfavorablePredictiveValueParity'
+)
+calcBiasMetric = function(fn, merged_data, protected_feature, thresh) {
+  if (fn == 'getProportionParity') return(getProportionParity(merged_data, protected_feature, thresh))
+  if (fn == 'getEqualParity') return(getEqualParity(merged_data, protected_feature, thresh))
+  if (fn == 'getFavorableClassBalance') return(getFavorableClassBalance(merged_data, protected_feature, thresh))
+  if (fn == 'getUnfavorableClassBalance') return(getUnfavorableClassBalance(merged_data, protected_feature, thresh))
+  if (fn == 'getFavorableRateParity') return(getFavorableRateParity(merged_data, protected_feature, thresh))
+  if (fn == 'getUnfavorableRateParity') return(getUnfavorableRateParity(merged_data, protected_feature, thresh))
+  if (fn == 'getFavorablePredictiveValueParity') return(getFavorablePredictiveValueParity(merged_data, protected_feature, thresh))
+  if (fn == 'getUnfavorablePredictiveValueParity') return(getUnfavorablePredictiveValueParity(merged_data, protected_feature, thresh))
+  stop(paste0('Unknown function: ', fn))
+}
+getBiasMetricSummary = function(merged_data, profit_curve, protected_feature) {
+  bias_metric_summary = bind_rows(lapply(biasMetricFunctions, function(fn) {
+    bias_temp = bind_rows(lapply(profit_curve$threshold, function(thresh) {
+      bias = calcBiasMetric(fn, merged_data, protected_feature, thresh) %>%
+        filter(fairness != 'Not Enough Data')
+      metric = names(bias)[3]
+      gb = mean(bias[, 3] < 0.8)
+      asb = mean(unlist(bias[bias[, 3] < 0.8, 3]))
+      if (nrow(bias) == 0) {
+        gb = NA
+        asb = NA
+      } 
+      result = tibble(protectedFeature = protected_feature,
+                      biasMetric = metric, 
+                      threshold = thresh,
+                      groupsBelow = gb,
+                      aveRelativityBelow = asb
+      ) %>%
+        mutate(aveRelativityBelow = ifelse(is.nan(aveRelativityBelow), NA, aveRelativityBelow))
+      return(result)
+    }))
+    return(bias_temp)
+  }))
+  return(bias_metric_summary)
+}

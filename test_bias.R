@@ -486,7 +486,7 @@ ggplot(data = tibble(model = c('Original', 'Zip-Code Feature Removed'),
   scale_y_continuous(labels=scales::dollar_format())
 plotProfitCurveComparison(profitCurve, 'Original', profit_curve_V1, 'With Zip-Code Removed')
 
-# TO DO: show the effect of removing zip_code upon unfair bias metrics
+# show the effect of removing zip_code upon unfair bias metrics
 for (featureName in protected) {
   # calculate and plot proportional parity
   pp1 = getProportionParity(mergedData, featureName, optimalThresholdForProfit)
@@ -530,13 +530,38 @@ for (featureName in protected) {
 }
 
 ###########################################################################################
-# remove bias 2: vary global decision threshold
+# remove bias 2: vary the global decision threshold
 ###########################################################################################
 
-# TO DO: vary the threshold for all loan applicants, so see what that does to our unfair bias metrics
-# TO DO: plot the relationship between the threshold vs. several unfair bias metrics
-# TO DO: plot the relationship between the profit curve vs. unfair bias metrics
-# TO DO: plot the relationship between group proportional outcomes vs. group accuracy
+profit_curve = getProfitCurve(mergedData, target, payoff_matrix)
+bias_metric_summary = bind_rows(lapply(protected, function(protected_feature) {
+  return(getBiasMetricSummary(mergedData, profit_curve, protected_feature))
+}))
+
+# plot trade-offs in profit and bias when varying the global decision threshold
+plot_data = bind_rows(list(
+  profit_curve %>% mutate(Metric = 'Relative Profit') %>% mutate(y = profit / max(profit_curve$profit)),
+  bias_metric_summary %>% 
+    filter(protectedFeature == 'gender') %>% 
+    filter(biasMetric %in% c('relative_proportional_parity', 'relative_favorable_class_balance')) %>%
+    rename(y = groupsBelow, Metric = biasMetric)
+))
+ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric)) +
+  ggtitle('Varying Threshold for Controlling Gender Bias') +
+  ylab('% Groups With Bias and % Max Profit') +
+  xlab('Threshold')
+#
+plot_data = bind_rows(list(
+  profit_curve %>% mutate(Metric = 'Relative Profit') %>% mutate(y = profit / max(profit_curve$profit)),
+  bias_metric_summary %>% 
+    filter(protectedFeature == 'race') %>% 
+    filter(biasMetric %in% c('relative_proportional_parity', 'relative_favorable_class_balance')) %>%
+    rename(y = groupsBelow, Metric = biasMetric)
+))
+ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric)) +
+  ggtitle('Varying Threshold for Controlling Raceial Bias') +
+  ylab('% Groups With Bias and % Max Profit') +
+  xlab('Threshold')
 
 ###########################################################################################
 # remove bias 3: vary decision threshold separately for each protected class
