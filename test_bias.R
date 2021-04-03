@@ -545,7 +545,9 @@ plot_data = bind_rows(list(
     filter(protectedFeature == 'gender') %>% 
     filter(biasMetric %in% c('relative_proportional_parity', 'relative_favorable_class_balance')) %>%
     rename(y = groupsBelow, Metric = biasMetric)
-))
+)) %>% 
+  mutate(Metric = gsub('relative_', '', Metric, fixed = TRUE)) %>% 
+  mutate(Metric = gsub('_', ' ', Metric, fixed = TRUE))
 ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric)) +
   ggtitle('Varying Threshold for Controlling Gender Bias') +
   ylab('% Groups With Bias and % Max Profit') +
@@ -557,9 +559,11 @@ plot_data = bind_rows(list(
     filter(protectedFeature == 'race') %>% 
     filter(biasMetric %in% c('relative_proportional_parity', 'relative_favorable_class_balance')) %>%
     rename(y = groupsBelow, Metric = biasMetric)
-))
+)) %>% 
+  mutate(Metric = gsub('relative_', '', Metric, fixed = TRUE)) %>% 
+  mutate(Metric = gsub('_', ' ', Metric, fixed = TRUE))
 ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric)) +
-  ggtitle('Varying Threshold for Controlling Raceial Bias') +
+  ggtitle('Varying Threshold for Controlling Racial Bias') +
   ylab('% Groups With Bias and % Max Profit') +
   xlab('Threshold')
 
