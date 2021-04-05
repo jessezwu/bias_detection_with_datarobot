@@ -136,7 +136,7 @@ mergedData$confusionQuadrant = getClassificationAccuracy(optimalThresholdForProf
 
 # calculate and plot proportional parity
 for (featureName in protected) {
-  pp = getProportionParity(mergedData, featureName, optimalThresholdForProfit)
+  pp = getProportionalParity(mergedData, featureName, optimalThresholdForProfit)
   plotProportionalParity(pp)
 }
 
@@ -489,8 +489,8 @@ plotProfitCurveComparison(profitCurve, 'Original', profit_curve_V1, 'With Zip-Co
 # show the effect of removing zip_code upon unfair bias metrics
 for (featureName in protected) {
   # calculate and plot proportional parity
-  pp1 = getProportionParity(mergedData, featureName, optimalThresholdForProfit)
-  pp2 = getProportionParity(merged_data_V1, featureName, optimal_threshold_profit_V1)
+  pp1 = getProportionalParity(mergedData, featureName, optimalThresholdForProfit)
+  pp2 = getProportionalParity(merged_data_V1, featureName, optimal_threshold_profit_V1)
   plotProportionalParityComparison(pp1, 'Original', pp2, 'With Zip-Code Removed')
   
   # calculate and plot equal parity
@@ -571,8 +571,75 @@ ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric
 # remove bias 3: vary decision threshold separately for each protected class
 ###########################################################################################
 
-# TO DO: vary the threshold for each group, so see what that does to our unfair bias metrics
-# TO DO: plot the relationship between the thresholds vs. several unfair bias metrics
+threshold_tables = list()
+for (protected_feature in protected) {
+  # what is the largest/larger group within a protected feature?
+  # use that cutoff as the base against which everything is compared
+  find_largest = mergedData %>%
+                  group_by(!!as.name(protected_feature)) %>%
+                  summarise(nRows = n()) %>%
+                  arrange(desc(nRows))
+  largest_group = unname(unlist(find_largest[1, 1]))
+  
+  # debias proportional parity
+  threshold_table = tibble(Group = unlist(find_largest[, 1]))
+  for (metric in biasMetricFunctions) {
+    # for each group, other than the largest, change the threshold to bias
+    # loop though one group at a time and get its absolute bias metric to as close to the largest group as possible
+    n = nrow(find_largest) - 1
+    best_group_thresholds = rep(optimalThresholdForProfit, n + 1)
+    names(best_group_thresholds) = unlist(find_largest[, 1])
+    target_bias = calcBiasMetric(metric, mergedData, protected_feature, optimalThresholdForProfit) %>%
+      filter(!!as.name(protected_feature) == largest_group)
+    target_bias = unlist(unname(target_bias[1, 2]))
+    for (i in 2:nrow(find_largest)) {
+      group_name = unname(unlist(find_largest[i, 1]))
+      group_thresholds = best_group_thresholds
+      best_score = 9e99
+      best_thresh = optimalThresholdForProfit
+      for (j in seq_len(99)) {
+        temp_thresh = 0.01 * j
+        temp = calcBiasMetric(metric, mergedData, protected_feature, temp_thresh) %>%
+          filter(!!as.name(protected_feature) == group_name)
+        if (nrow(temp) > 0) {
+          temp = unlist(unname(temp[1, 2]))
+          score = abs(target_bias - temp)
+          if (score < best_score) {
+            best_score = score
+            best_thresh = temp_thresh
+          }
+        }
+      }
+      x = best_thresh
+      for (j in seq_len(20)) {
+        temp_thresh = x + 0.001 * (j - 10)
+        temp = calcBiasMetric(metric, mergedData, protected_feature, temp_thresh) %>%
+          filter(!!as.name(protected_feature) == group_name)
+        if (nrow(temp) > 0) {
+          temp = unlist(unname(temp[1, 2]))
+          score = abs(target_bias - temp)
+          if (score < best_score) {
+            best_score = score
+            best_thresh = temp_thresh
+          }
+        }
+      }
+      best_group_thresholds[i] = best_thresh
+    }
+    #bias_measures = calcBiasMetric(metric, mergedData, protected_feature, best_group_thresholds)
+    threshold_table = threshold_table %>%
+      mutate(!!gsub(' ', '', toMetricName(metric), fixed = TRUE) := unname(best_group_thresholds))
+  }
+  cat('Low bias thresholds for feature', protected_feature, 'are:\n')
+  print(threshold_table)
+  
+  iii = length(threshold_tables) + 1
+  threshold_tables[[iii]] = threshold_table %>% 
+    mutate(Feature = protected_feature) %>% 
+    relocate(Feature, .before = 1)
+}
+threshold_tables = bind_rows(threshold_tables)
+
 # TO DO: plot the relationship between the thresholds vs. profit curve
 # TO DO: plot the relationship between the profit curve vs. unfair bias metrics
 # TO DO: create what-if scenarios and show that this approach creates disparate treatment

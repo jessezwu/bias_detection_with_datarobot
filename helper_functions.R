@@ -50,7 +50,7 @@ plotProfitCurveComparison = function(pc1, pc1_label, pc2, pc2_label) {
 }
 
 # calculate proportional parity
-getProportionParity = function(merged_data, featureName, thresh) {
+getProportionalParity = function(merged_data, featureName, thresh) {
   temp = merged_data %>%
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
     group_by(!!as.name(featureName), positiveResult) %>%
@@ -392,7 +392,7 @@ plotUnfavorablePredictiveValueParityComparison = function(dat1, label1, dat2, la
 }
 
 # summarise the bias metrics across a range of thresholds
-biasMetricFunctions = c('getProportionParity',
+biasMetricFunctions = c('getProportionalParity',
                         'getEqualParity',
                         'getFavorableClassBalance',
                         'getUnfavorableClassBalance',
@@ -401,8 +401,22 @@ biasMetricFunctions = c('getProportionParity',
                         'getFavorablePredictiveValueParity',
                         'getUnfavorablePredictiveValueParity'
 )
+toMetricName = function(x) {
+  i = which(x == biasMetricFunctions)
+  names = c('Proportional Parity',
+            'Equal Parity',
+            'Favorable Class Balance',
+            'Unfavorable Class Balance',
+            'Favorable Rate Parity',
+            'Unfavorable Rate Parity',
+            'Favorable Predictive Value Parity',
+            'Unfavorable Predictive Value Parity'
+  )
+  return(names[i])
+}
 calcBiasMetric = function(fn, merged_data, protected_feature, thresh) {
-  if (fn == 'getProportionParity') return(getProportionParity(merged_data, protected_feature, thresh))
+  if (length(thresh) > 1) return(calcBiasMetricMultiThresh(fn, merged_data, protected_feature, thresh))
+  if (fn == 'getProportionalParity') return(getProportionalParity(merged_data, protected_feature, thresh))
   if (fn == 'getEqualParity') return(getEqualParity(merged_data, protected_feature, thresh))
   if (fn == 'getFavorableClassBalance') return(getFavorableClassBalance(merged_data, protected_feature, thresh))
   if (fn == 'getUnfavorableClassBalance') return(getUnfavorableClassBalance(merged_data, protected_feature, thresh))
@@ -412,6 +426,18 @@ calcBiasMetric = function(fn, merged_data, protected_feature, thresh) {
   if (fn == 'getUnfavorablePredictiveValueParity') return(getUnfavorablePredictiveValueParity(merged_data, protected_feature, thresh))
   stop(paste0('Unknown function: ', fn))
 }
+calcBiasMetricMultiThresh = function(fn, merged_data, protected_feature, thresh) {
+  base_result = calcBiasMetric(fn, merged_data, protected_feature, thresh[1])
+  for (i in 2:(length(thresh))) {
+    next_result = calcBiasMetric(fn, merged_data, protected_feature, thresh[i])
+    j1 = seq_len(nrow(base_result))[base_result[, 1] == names(thresh)[i]]
+    j2 = seq_len(nrow(next_result))[next_result[, 1] == names(thresh)[i]]
+    base_result[j1, 2] = next_result[j2, 2]
+  }
+  base_result = base_result[, seq_len(2)]
+  return(base_result)
+}
+
 getBiasMetricSummary = function(merged_data, profit_curve, protected_feature) {
   bias_metric_summary = bind_rows(lapply(biasMetricFunctions, function(fn) {
     bias_temp = bind_rows(lapply(profit_curve$threshold, function(thresh) {
