@@ -640,8 +640,126 @@ for (protected_feature in protected) {
 }
 threshold_tables = bind_rows(threshold_tables)
 
-# TO DO: plot the relationship between the thresholds vs. profit curve
-# TO DO: plot the relationship between the profit curve vs. unfair bias metrics
+# reframe the payoffs so that positive means a preferred outcome
+payoffs = list(
+  TP = 1500,
+  FP = -10000,
+  TN = 0,
+  FN = 0
+)
+groups = unname(unlist(merged_data %>% 
+                         group_by(!!as.name(protected_feature)) %>% 
+                         summarise(nRows = n()) %>%
+                         arrange(desc(nRows)) %>%
+                         select(!!protected_feature)))
+prediction_column = paste0('class_', preferable_outcome)
+roc_groupings = tibble(flag_pos_outcome = c('Pos', 'Pos', 'Neg', 'Neg'),
+                       flag_pos_prediction = c('Pos', 'Neg', 'Pos', 'Neg'),
+                       flag_roc = c('TP', 'FN', 'FP', 'TN'))
+thresholds = 0.001 * (0:1000)
+na.is.zero = function(x) { return(ifelse(is.na(x), 0, x))}
+roc_table = bind_rows(lapply(thresholds, function(thresh) {
+  temp = mergedData %>%
+    select(all_of(c(protected_feature, target, prediction_column))) %>%
+    mutate(flag_pos_outcome = ifelse(!!as.name(target) == preferable_outcome, 'Pos', 'Neg')) %>%
+    mutate(flag_pos_prediction = ifelse(!!as.name(prediction_column) > thresh, 'Pos', 'Neg')) %>%
+    left_join(roc_groupings, by = c('flag_pos_outcome', 'flag_pos_prediction')) %>%
+    group_by(!!as.name(protected_feature), flag_roc) %>%
+    summarise(nRow = n(), sumPrediction = sum(!!as.name(prediction_column)), .groups = 'drop') %>%
+    pivot_wider(id_cols = !!protected_feature, names_from = flag_roc, values_from = c(nRow, sumPrediction), values_fill = 0) %>%
+    mutate(threshold = thresh) %>%
+    relocate(threshold, .after = 1)
+  return(temp)
+})) %>%
+  arrange(!!as.name(protected_feature), threshold) %>%
+  mutate(nRow_TP = na.is.zero(nRow_TP)) %>%
+  mutate(nRow_FP = na.is.zero(nRow_FP)) %>%
+  mutate(nRow_TN = na.is.zero(nRow_TN)) %>%
+  mutate(nRow_FN = na.is.zero(nRow_FN)) %>%
+  mutate(sumPrediction_TP = na.is.zero(sumPrediction_TP)) %>%
+  mutate(sumPrediction_FP = na.is.zero(sumPrediction_FP)) %>%
+  mutate(sumPrediction_TN = na.is.zero(sumPrediction_TN)) %>%
+  mutate(sumPrediction_FN = na.is.zero(sumPrediction_FN))
+roc_table = roc_table %>%
+  mutate(Profit = payoffs$TP * nRow_TP +
+            payoffs$TN * nRow_TN +
+            payoffs$FP * nRow_FP +
+            payoffs$FN * nRow_FN
+    ) %>%
+  mutate(ProportionPositive = (nRow_TP + nRow_FP) / (nRow_TP + nRow_FP + nRow_TN + nRow_FN)) %>%
+  mutate(CountPositive = nRow_TP + nRow_FP) %>%
+  mutate(FavorableScore = (sumPrediction_TP + sumPrediction_FP) / (nRow_TP + nRow_FP)) %>%
+  mutate(UnfavorableScore = (sumPrediction_TN + sumPrediction_FN) / (nRow_TN + nRow_FN)) %>%
+  mutate(FavorableRate = nRow_TP / (nRow_TP + nRow_FN)) %>%
+  mutate(UnfavorableRate = nRow_TN / (nRow_TN + nRow_FP)) %>%
+  mutate(FavorableValue = nRow_TP / (nRow_TP + nRow_FP)) %>%
+  mutate(UnfavorableValue = nRow_TN / (nRow_TN + nRow_FN))
+
+# summarise the optimal thresholds for each metric
+#
+# first optimise profit
+profit_optimisation = roc_table %>%
+  group_by(!!as.name(protected_feature)) %>%
+  summarise(Profit = max(Profit)) %>% 
+  left_join(roc_table, by = c(protected_feature, 'Profit')) %>%
+  group_by(!!as.name(protected_feature)) %>%
+  summarise(optThreshold = round(median(threshold), 3), maxProfit = mean(Profit), .groups = 'drop')
+# optimise proportional parity, while also optimising profit
+# get sets of thresholds that achieve proportional parity
+col1 = paste0('th', largest_group)
+col1b = paste0('prf', largest_group)
+matching_thresholds = roc_table %>%
+  filter(!!as.name(protected_feature) == largest_group) %>%
+  mutate(!!col1 := threshold) %>%
+  mutate(!!col1b := Profit) %>%
+  mutate(!!largest_group := ProportionPositive) %>%
+  select(all_of(c(col1, col1b, largest_group)))
+for (group in groups[groups != largest_group]) {
+  col2 = paste0('th', group)
+  col2b = paste0('prf', group)
+  temp = roc_table %>%
+    filter(!!as.name(protected_feature) == group) %>%
+    mutate(!!col2 := threshold) %>%
+    mutate(!!col2b := Profit) %>%
+    mutate(!!group := ProportionPositive) %>%
+    select(all_of(c(col2, col2b, group)))
+  newCols = bind_rows(lapply(seq_len(nrow(matching_thresholds)), function(r) {
+    th = unlist(matching_thresholds[r, col1])
+    mm = unlist(matching_thresholds[r, largest_group])
+    temp2 = temp %>%
+      mutate(match_score = 1000. * abs(!!as.name(group) - mm) + abs(!!as.name(col2) - th)) %>%
+      arrange(match_score)
+    return(temp2 %>% select(all_of(c(col2, col2b, group))) %>% slice(1))
+  }))
+  matching_thresholds = bind_cols(list(matching_thresholds, newCols))
+}
+# add some metrics to help choose the optimal result
+matching_thresholds = matching_thresholds %>% mutate(TotalProfit = 0)
+for (group in groups) {
+  col1 = paste0('prf', group)
+  matching_thresholds = matching_thresholds %>% mutate(TotalProfit = TotalProfit + !!as.name(col1))
+}
+# optimal profit - with proportional parity as fixed as much as possible
+threshold_columns = names(matching_thresholds)[substr(names(matching_thresholds), 1, 2) == 'th']
+profit_columns = names(matching_thresholds)[substr(names(matching_thresholds), 1, 3) == 'prf']
+cat(paste0('Optimal profit, while achieving proportional parity = ', max(matching_thresholds$TotalProfit), '\n'))
+cat('Thresholds by Group:\n')
+print(matching_thresholds[which.max(matching_thresholds$TotalProfit), threshold_columns])
+cat('Profit by Group:\n')
+print(matching_thresholds[which.max(matching_thresholds$TotalProfit), profit_columns])
+
+# plot the relationship between the profit curve vs. unfair bias metrics
+iCols = 3 * seq_len(length(groups))
+apply(threshold_columns[, iCols], 1, max)
+plot_data = matching_thresholds %>%
+  mutate(rangeMetrics = do.call(pmax, matching_thresholds[, iCols]) - do.call(pmin, matching_thresholds[, iCols])) %>%
+  select(TotalProfit, rangeMetrics)
+ggplot() + 
+  geom_point(data = plot_data, aes(x = TotalProfit, y = rangeMetrics)) +
+  ggtitle('Profit and Variation Bias Metrics Between Groups') +
+  xlab('Profit') +
+  ylab('Variation in Proportional Parity')
+
 # TO DO: create what-if scenarios and show that this approach creates disparate treatment
 # TO DO: plot the relationship between group proportional outcomes vs. group accuracy
 # TO DO: repeat the process to show how optimising proportional outcomes has quite different results to optimizing group accuracy
@@ -649,6 +767,7 @@ threshold_tables = bind_rows(threshold_tables)
 ###########################################################################################
 # remove bias 4: alter the feature values to remove entrenched disadvantage
 ###########################################################################################
+
 
 # TO DO: artificially increase the income feature value to remove the gender pay gap
 # TO DO: plot the relationship between the percentage adjustment vs. unfair bias metrics
