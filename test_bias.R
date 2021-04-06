@@ -75,7 +75,7 @@ best_model <- GetModelRecommendation(project, 'Recommended for Deployment')
 # truePositiveValue = 0        # no bad loan, no loss
 # trueNegativeValue = 1500     # good loan written, $1500 profit made
 # falsePositiveValue = 0       # no good loan written, opportunity cost $1500 in profit, but net payoff is zero
-# falseNegativeValue = -5000   # bad loan written, $10000 in loan write-offs
+# falseNegativeValue = -10000  # bad loan written, $10000 in loan write-offs
 
 payoff_matrix = CreatePayoffMatrix(project, 'payoff matrix', 0, 1500, 0, -10000)
 
@@ -90,19 +90,21 @@ trainingData = read_csv(filename)
 mergedData = bind_cols(trainingData, trainingPredictions)
 
 # get the profit curve
-profitCurve = getProfitCurve(mergedData, target, payoff_matrix)
+profitCurve <- getProfitCurve(mergedData, project, payoff_matrix)
 optimalThresholdForProfit = profitCurve$threshold[which.max(profitCurve$profit)]
 ggplot(data = profitCurve, aes(x = threshold, y = profit)) +
   geom_line() +
   ggtitle('Profit Curve') +
   scale_y_continuous(labels=scales::dollar_format())
-mergedData = mergedData %>%
-  mutate(positiveResult = ifelse(class_Yes <= optimalThresholdForProfit, 'Pos', 'Neg'))
+new = mergedData %>%
+  mutate(positiveResult = ifelse(
+    !!as.name(paste0('class_', project$positiveClass)) <= optimalThresholdForProfit,
+    'Pos',
+    'Neg')
+  )
 
 # get the accuracy (confusion matrix) using the optimal threshold for profit
 rocCurve = GetRocCurve(model, DataPartition$VALIDATION, fallbackToParentInsights = TRUE)
-
-#
 
 # calculate the fairness metrics using the optimal threshold for profit
 # https://app.datarobot.com/docs/modeling/investigate/bias/bias-ref.html#proportional-parity

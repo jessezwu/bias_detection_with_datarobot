@@ -38,21 +38,34 @@ CreatePayoffMatrix = function (project, matrix_name = 'new payoff matrix',
 
 
 # get the profit curve
-getProfitCurve = function(merged_data, target, payoff_matrix) {
-  thresholds = 0.001 * 0:1000
-  profit = sapply(thresholds, function(x) {
-    # TO DO: find the positive class for this project and don't hard code it in the calculation
-    temp = tibble(target = merged_data[, target], probability = merged_data$class_Yes) %>%
-      mutate(payoff =
-               payoff_matrix$truePositiveValue * ifelse(probability > x & target == 'Yes', 1, 0) +
-               payoff_matrix$trueNegativeValue * ifelse(probability <= x & target != 'Yes', 1, 0) +
-               payoff_matrix$falsePositiveValue * ifelse(probability > x & target != 'Yes', 1, 0) +
-               payoff_matrix$falseNegativeValue * ifelse(probability <= x & target == 'Yes', 1, 0)
-      )
-    return(sum(temp$payoff))
-  })
-  profitCurve = tibble(threshold = thresholds, profit = profit)
-  return(profitCurve)
+getProfitCurve = function(merged_data, project, payoff_matrix) {
+  tibble(
+      target = merged_data %>% extract2(project$target) == project$positiveClass,
+      probability = merged_data %>% extract2(paste0('class_', project$positiveClass))
+    ) %>%
+    arrange(probability) %>%
+    mutate(
+      positives = sum(target), # constant
+      negatives = sum(!target), # constant
+      cum_positives = cumsum(target),
+      cum_negatives = cumsum(!target)
+    ) %>%
+    group_by(probability) %>%
+    summarise(
+      tp = first(positives) - max(cum_positives), # positives > threshold
+      tn = max(cum_negatives),                    # negatives <= threshold
+      fp = first(negatives) - max(cum_negatives), # negatives > threshold
+      fn = max(cum_positives),                    # positives <= theshold
+      .groups = 'drop'
+    ) %>%
+    transmute(
+      threshold = probability,
+      profit =
+        payoff_matrix$truePositiveValue * tp +
+        payoff_matrix$trueNegativeValue * tn +
+        payoff_matrix$falsePositiveValue * fp +
+        payoff_matrix$falseNegativeValue * fn
+    )
 }
 
 plotProfitCurveComparison = function(pc1, pc1_label, pc2, pc2_label) {
