@@ -72,22 +72,6 @@ WaitForAutopilot(project)
 # take top model
 best_model <- GetModelRecommendation(project, 'Recommended for Deployment')
 
-# write an R function to create a payoff matrix
-CreatePayoffMatrix = function (project, matrix_name = 'new payoff matrix', 
-                               TP_value = 1, TN_value = 1, FP_value = 1, FN_value = 1) 
-{
-  projectId <- datarobot:::ValidateProject(project)
-  routeString <- datarobot:::UrlJoin("projects", projectId, "payoffMatrices")
-  body = list(name = matrix_name, 
-                 truePositiveValue = TP_value,
-                 trueNegativeValue = TN_value,
-                 falsePositiveValue = FP_value,
-                 falseNegativeValue = FN_value)
-  rawReturn <- datarobot:::DataRobotPOST(routeString, body = body, returnRawResponse = TRUE)
-  payoff_matrix = content(rawReturn)
-  return(payoff_matrix)
-}
-
 # truePositiveValue = 0        # no bad loan, no loss
 # trueNegativeValue = 1500     # good loan written, $1500 profit made
 # falsePositiveValue = 0       # no good loan written, opportunity cost $1500 in profit, but net payoff is zero
@@ -108,7 +92,7 @@ mergedData = bind_cols(trainingData, trainingPredictions)
 # get the profit curve
 profitCurve = getProfitCurve(mergedData, target, payoff_matrix)
 optimalThresholdForProfit = profitCurve$threshold[which.max(profitCurve$profit)]
-ggplot(data = profitCurve, aes(x = threshold, y = profit)) + 
+ggplot(data = profitCurve, aes(x = threshold, y = profit)) +
   geom_line() +
   ggtitle('Profit Curve') +
   scale_y_continuous(labels=scales::dollar_format())
@@ -118,19 +102,10 @@ mergedData = mergedData %>%
 # get the accuracy (confusion matrix) using the optimal threshold for profit
 rocCurve = GetRocCurve(model, DataPartition$VALIDATION, fallbackToParentInsights = TRUE)
 
-# 
+#
 
 # calculate the fairness metrics using the optimal threshold for profit
 # https://app.datarobot.com/docs/modeling/investigate/bias/bias-ref.html#proportional-parity
-
-getClassificationAccuracy = function(thresh) {
-  temp = tibble(target = mergedData[, target], probability = mergedData$class_Yes) %>%
-    mutate(confusion = ifelse(probability > thresh & target == 'Yes', 'TP', '')) %>%
-    mutate(confusion = ifelse(probability <= thresh & target != 'Yes', 'TN', confusion)) %>%
-    mutate(confusion = ifelse(probability > thresh & target != 'Yes', 'FP', confusion)) %>%
-    mutate(confusion = ifelse(probability <= thresh & target == 'Yes', 'FN', confusion))
-  return(unlist(temp$confusion))
-}
 
 mergedData$confusionQuadrant = getClassificationAccuracy(optimalThresholdForProfit)
 
@@ -241,7 +216,7 @@ eda_table = featureinfolist.as.data.frame(eda_summary)
 date_features = unname(unlist(eda_table %>% filter(featureType == 'Date') %>% select(name)))
 text_features = unname(unlist(eda_table %>% filter(featureType == 'Text') %>% select(name)))
 engineered_date_features = bind_rows(lapply(
-            c('Year', 'Month', 'Day', 'Hour'), 
+            c('Year', 'Month', 'Day', 'Hour'),
             function(x) return(tibble(raw = date_features, engineered = paste0(date_features, ' (', x, ')'), period = x)))) %>%
         filter(engineered %in% input_features)
 raw_features = input_features
@@ -255,7 +230,7 @@ raw_features = unique(raw_features)
 
 # get cross-class data disparity for protected features
 psi_scores = bind_rows(lapply(protected, function(protected_feature) {
-  test_data = mergedData %>% 
+  test_data = mergedData %>%
     select(all_of(c(raw_features, target, protected_feature)))
   for (r in seq_len(nrow(engineered_date_features))) {
     if (engineered_date_features$period[r] == 'Year') test_data[, engineered_date_features$engineered[r]] = year(anydate(unname(unlist(test_data[, engineered_date_features$raw[r]]))))
@@ -271,7 +246,7 @@ psi_scores = bind_rows(lapply(protected, function(protected_feature) {
                     dat_test = test_data_2,
                     ex_cols = c(text_features, protected_feature),
                     as_table = TRUE
-                  ) %>% 
+                  ) %>%
                   filter(! is.infinite(PSI_i)) %>%
                   group_by(Feature) %>%
                   summarise(PSI = sum(PSI_i), .groups = 'drop') %>%
@@ -290,7 +265,7 @@ feature_impact = GetFeatureImpact(model)
 for (protected_feature in protected) {
   group_levels = unique(unlist(mergedData[, protected_feature]))
   for (protected_group in group_levels) {
-    plot_data = psi_scores %>% 
+    plot_data = psi_scores %>%
                   filter(protected_feature == protected_feature & group_level == protected_group) %>%
                   left_join(feature_impact %>% select(featureName, impactNormalized) %>% rename(Feature = featureName), by = 'Feature') %>%
                   mutate(impactNormalized = ifelse(Feature == target, 1, impactNormalized)) %>%
@@ -298,7 +273,7 @@ for (protected_feature in protected) {
                   mutate(Impact = ifelse(PSI <= 0.1, 'Low', ifelse(PSI <= 0.25, 'Moderate', 'Major'))) %>%
                   mutate(Impact = factor(Impact, levels = c('Low', 'Moderate', 'Major')))
     plt = ggplot(data = plot_data, aes(x = impactNormalized, y = PSI, colour = Impact, label = Feature)) +
-                  geom_point() + 
+                  geom_point() +
                   geom_text_repel(size = 2.5) +
                   scale_colour_manual(values = c('green2', 'yellow3', 'red')) +
                   ggtitle('Cross-Class Data Disparity',
@@ -317,10 +292,10 @@ for (protected_feature in protected) {
   strengths = feature_association$strengths %>%
     filter(feature1 == protected_feature | feature2 == protected_feature) %>%
     arrange(desc(statistic))
-  strengths = strengths %>% 
+  strengths = strengths %>%
     top_n(5, statistic)
-  associated_features = sapply(seq_len(5), function(r) 
-    return(ifelse(strengths$feature1[r] == strengths$feature2[r] | strengths$feature2[r] == protected_feature, 
+  associated_features = sapply(seq_len(5), function(r)
+    return(ifelse(strengths$feature1[r] == strengths$feature2[r] | strengths$feature2[r] == protected_feature,
                   strengths$feature1[r], strengths$feature2[r])))
   strengths = feature_association$strengths %>%
     filter(feature1 %in% associated_features & feature2 %in% associated_features) %>%
@@ -350,7 +325,7 @@ for (protected_feature in protected) {
   group_list = unique(unlist(mergedData %>% select(all_of(protected_feature))))
   if (length(group_list) == 2) {
     target_group = head(group_list, 1)
-    temp_data = mergedData %>% 
+    temp_data = mergedData %>%
       select(all_of(c(raw_features, protected_feature)))
     prj = StartProject(dataSource = temp_data,
                        projectName = paste0('Find indirect bias - ', protected_feature),
@@ -365,11 +340,11 @@ for (protected_feature in protected) {
   }
   if (length(group_list) > 2) {
     for (target_group in group_list) {
-      temp_data = mergedData %>% 
+      temp_data = mergedData %>%
         select(all_of(c(raw_features, protected_feature))) %>%
         mutate(target_protected_group = ifelse(!!as.name(protected_feature) == target_group, target_group, 'all_others')) %>%
         select(-all_of(protected_feature))
-        
+
       prj = StartProject(dataSource = temp_data,
                          projectName = paste0('Find indirect bias - ', protected_feature, ' - ', target_group),
                          target = 'target_protected_group',
@@ -400,8 +375,8 @@ for (i in seq_len(length(indirect_projects))) {
   indirect_feature_impact = GetFeatureImpact(indirect_top_model)
   indirect_feature_impact = indirect_feature_impact %>% mutate(featureName = factor(featureName, levels = rev(indirect_feature_impact$featureName)))
   plt = ggplot(data = indirect_feature_impact, aes(x = featureName, y = impactNormalized)) +
-    geom_col() + 
-    coord_flip() + 
+    geom_col() +
+    coord_flip() +
     ggtitle('Feature Impact', subtitle = paste0('Potential proxies for: ', protected_feature, ' and group: ', protected_group)) +
     xlab('Feature Name') +
     ylab('Feature Impact')
@@ -431,7 +406,7 @@ for (i in seq_len(length(indirect_projects))) {
       scale_size_area(max_size = 24) +
       theme_minimal() +
       scale_colour_manual(values = colours) +
-      ggtitle(paste0('Potential text proxies for: ', protected_feature), 
+      ggtitle(paste0('Potential text proxies for: ', protected_feature),
               subtitle = subtitle)
     print(plt)
   }
@@ -453,12 +428,12 @@ jobID = RequestNewModel(
 WaitForJobToComplete(project, jobID)
 model_V1 = GetModelFromJobId(project, jobID)
 
-# show the effect upon accuracy of removing zip_code 
+# show the effect upon accuracy of removing zip_code
 leaderboard = as.data.frame(ListModels(project)) %>%
   filter(modelId %in% c(model$modelId, model_V1$modelId))
 leaderboard$crossValidationMetric = sapply(leaderboard$modelId, function(x) return(GetModel(project, x)$metrics$LogLoss$crossValidation))
 leaderboard$holdoutMetric = sapply(leaderboard$modelId, function(x) return(GetModel(project, x)$metrics$LogLoss$holdout))
-leaderboard = leaderboard %>% 
+leaderboard = leaderboard %>%
   select(modelType, featurelistName, samplePct, validationMetric, crossValidationMetric, holdoutMetric) %>%
   arrange(holdoutMetric)
 ggplot(data = leaderboard) +
@@ -479,7 +454,7 @@ profit_curve_V1 = getProfitCurve(merged_data_V1, target, payoff_matrix)
 optimal_threshold_profit_V1 = profit_curve_V1$threshold[which.max(profit_curve_V1$profit)]
 merged_data_V1 = merged_data_V1 %>%
   mutate(positiveResult = ifelse(class_Yes <= optimal_threshold_profit_V1, 'Pos', 'Neg'))
-ggplot(data = tibble(model = c('Original', 'Zip-Code Feature Removed'), 
+ggplot(data = tibble(model = c('Original', 'Zip-Code Feature Removed'),
                      profit = c(max(profitCurve$profit), max(profit_curve_V1$profit)))) +
   geom_col(aes(x = model, y = profit)) +
   ggtitle('Profit Effect of Indirect Discrimination Removal') +
@@ -492,37 +467,37 @@ for (featureName in protected) {
   pp1 = getProportionalParity(mergedData, featureName, optimalThresholdForProfit)
   pp2 = getProportionalParity(merged_data_V1, featureName, optimal_threshold_profit_V1)
   plotProportionalParityComparison(pp1, 'Original', pp2, 'With Zip-Code Removed')
-  
+
   # calculate and plot equal parity
   eqp1 = getEqualParity(mergedData, featureName, optimalThresholdForProfit)
   eqp2 = getEqualParity(merged_data_V1, featureName, optimal_threshold_profit_V1)
   plotEqualParityComparison(eqp1, 'Original', eqp2, 'With Zip-Code Removed')
-  
+
   # calculate and plot favorable class balance
   fcb1 = getFavorableClassBalance(mergedData, featureName, optimalThresholdForProfit)
   fcb2 = getFavorableClassBalance(merged_data_V1, featureName, optimal_threshold_profit_V1)
   plotFavorableClassBalanceComparison(fcb1, 'Original', fcb2, 'With Zip-Code Removed')
-  
+
   # calculate and plot unfavorable class balance
   ucb1 = getUnfavorableClassBalance(mergedData, featureName, optimalThresholdForProfit)
   ucb2 = getUnfavorableClassBalance(merged_data_V1, featureName, optimal_threshold_profit_V1)
   plotUnfavorableClassBalanceComparison(ucb1, 'Original', ucb2, 'With Zip-Code Removed')
-  
+
   # calculate and plot favorable rate parity
   frp1 = getFavorableRateParity(mergedData, featureName, optimalThresholdForProfit)
   frp2 = getFavorableRateParity(merged_data_V1, featureName, optimal_threshold_profit_V1)
   plotFavorableRateParityComparison(frp1, 'Original', frp2, 'With Zip-Code Removed')
-  
+
   # calculate and plot unfavorable rate parity
   urp1 = getUnfavorableRateParity(mergedData, featureName, optimalThresholdForProfit)
   urp2 = getUnfavorableRateParity(merged_data_V1, featureName, optimal_threshold_profit_V1)
   plotUnfavorableRateParityComparison(urp1, 'Original', urp2, 'With Zip-Code Removed')
-  
+
   # calculate and plot favorable predictive value parity
   fpv1 = getFavorablePredictiveValueParity(mergedData, featureName, optimalThresholdForProfit)
   fpv2 = getFavorablePredictiveValueParity(merged_data_V1, featureName, optimal_threshold_profit_V1)
   plotFavorablePredictiveValueParityComparison(fpv1, 'Original', fpv2, 'With Zip-Code Removed')
-  
+
   # calculate and plot unfavorable rate parity
   upv1 = getUnfavorablePredictiveValueParity(mergedData, featureName, optimalThresholdForProfit)
   upv2 = getUnfavorablePredictiveValueParity(merged_data_V1, featureName, optimal_threshold_profit_V1)
@@ -541,12 +516,12 @@ bias_metric_summary = bind_rows(lapply(protected, function(protected_feature) {
 # plot trade-offs in profit and bias when varying the global decision threshold
 plot_data = bind_rows(list(
   profit_curve %>% mutate(Metric = 'Relative Profit') %>% mutate(y = profit / max(profit_curve$profit)),
-  bias_metric_summary %>% 
-    filter(protectedFeature == 'gender') %>% 
+  bias_metric_summary %>%
+    filter(protectedFeature == 'gender') %>%
     filter(biasMetric %in% c('relative_proportional_parity', 'relative_favorable_class_balance')) %>%
     rename(y = groupsBelow, Metric = biasMetric)
-)) %>% 
-  mutate(Metric = gsub('relative_', '', Metric, fixed = TRUE)) %>% 
+)) %>%
+  mutate(Metric = gsub('relative_', '', Metric, fixed = TRUE)) %>%
   mutate(Metric = gsub('_', ' ', Metric, fixed = TRUE))
 ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric)) +
   ggtitle('Varying Threshold for Controlling Gender Bias') +
@@ -555,12 +530,12 @@ ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric
 #
 plot_data = bind_rows(list(
   profit_curve %>% mutate(Metric = 'Relative Profit') %>% mutate(y = profit / max(profit_curve$profit)),
-  bias_metric_summary %>% 
-    filter(protectedFeature == 'race') %>% 
+  bias_metric_summary %>%
+    filter(protectedFeature == 'race') %>%
     filter(biasMetric %in% c('relative_proportional_parity', 'relative_favorable_class_balance')) %>%
     rename(y = groupsBelow, Metric = biasMetric)
-)) %>% 
-  mutate(Metric = gsub('relative_', '', Metric, fixed = TRUE)) %>% 
+)) %>%
+  mutate(Metric = gsub('relative_', '', Metric, fixed = TRUE)) %>%
   mutate(Metric = gsub('_', ' ', Metric, fixed = TRUE))
 ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric)) +
   ggtitle('Varying Threshold for Controlling Racial Bias') +
@@ -580,7 +555,7 @@ for (protected_feature in protected) {
                   summarise(nRows = n()) %>%
                   arrange(desc(nRows))
   largest_group = unname(unlist(find_largest[1, 1]))
-  
+
   # debias proportional parity
   threshold_table = tibble(Group = unlist(find_largest[, 1]))
   for (metric in biasMetricFunctions) {
@@ -632,10 +607,10 @@ for (protected_feature in protected) {
   }
   cat('Low bias thresholds for feature', protected_feature, 'are:\n')
   print(threshold_table)
-  
+
   iii = length(threshold_tables) + 1
-  threshold_tables[[iii]] = threshold_table %>% 
-    mutate(Feature = protected_feature) %>% 
+  threshold_tables[[iii]] = threshold_table %>%
+    mutate(Feature = protected_feature) %>%
     relocate(Feature, .before = 1)
 }
 threshold_tables = bind_rows(threshold_tables)
