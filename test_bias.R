@@ -90,6 +90,7 @@ trainingData = read_csv(filename)
 mergedData = bind_cols(trainingData, trainingPredictions)
 
 # get the profit curve
+project = GetProject(project$projectId)   # make the project into a full project object
 profitCurve <- getProfitCurve(mergedData, project, payoff_matrix)
 optimalThresholdForProfit = profitCurve$threshold[which.max(profitCurve$profit)]
 ggplot(data = profitCurve, aes(x = threshold, y = profit)) +
