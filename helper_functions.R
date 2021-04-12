@@ -6,6 +6,56 @@
 
 # TODO: get rid of Class_Yes
 
+null.is.na = function(x) { return(ifelse(is.null(x), NA, x))}
+featureinfo.as.data.frame = function(x) {
+  result = tibble(
+    id = x$id,
+    name = x$name,
+    featureType = null.is.na(x$featureType),
+    importance = null.is.na(x$importance),
+    lowInformation = x$lowInformation,
+    targetLeakage = x$targetLeakage,
+    projectId = x$projectId,
+    uniqueCount = x$uniqueCount,
+    naCount = null.is.na(x$naCount),
+    min = null.is.na(x$min),
+    mean = null.is.na(x$mean),
+    median = null.is.na(x$median),
+    max = null.is.na(x$max),
+    stdDev = null.is.na(x$stdDev),
+    timeSeriesEligible = x$timeSeriesEligible,
+    timeSeriesEligibility = x$timeSeriesEligibility,
+    dateFormat = null.is.na(x$dateFormat),
+    timeUnit = null.is.na(x$timeUnit),
+    timeStep = null.is.na(x$timeStep)
+  )
+  if (! is.na(result$featureType[1])) {
+    if (result$featureType[1] == 'Date')
+      result = result %>%
+        mutate(
+          min = julian(ymd(min)),
+          mean = julian(ymd(mean)),
+          median = julian(ymd(median)),
+          max = julian(ymd(max)),
+          stdDev = as.numeric(gsub(' days', '', stdDev))
+        )
+    if (result$featureType[1] == 'Percentage')
+      result = result %>%
+        mutate(
+          min = as.numeric(gsub('%', '', min)),
+          mean = as.numeric(gsub('%', '', mean)),
+          median = as.numeric(gsub('%', '', median)),
+          max = as.numeric(gsub('%', '', max)),
+          stdDev = as.numeric(gsub('%', '', stdDev))
+        )
+  }
+  tibble::validate_tibble(result)
+  return(result)
+}
+featureinfolist.as.data.frame = function(x) {
+  return(bind_rows(lapply(x, featureinfo.as.data.frame)))
+}
+
 getStackedPredictions = function(project, model) {
   predictions <- ListTrainingPredictions(project)
   predictionId <- unlist(lapply(predictions, function(x)
