@@ -4,6 +4,8 @@
 #
 ##################################################
 
+# TODO: get rid of Class_Yes
+
 getStackedPredictions = function(project, model) {
   predictions <- ListTrainingPredictions(project)
   predictionId <- unlist(lapply(predictions, function(x)
@@ -124,13 +126,13 @@ getEqualParity = function(merged_data, featureName, thresh) {
   if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
   if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
   temp = temp %>%
-    mutate(absolute_equal_parity = Pos)
     mutate(nTot = Neg + Pos) %>%
+    mutate(absolute_equal_parity = Pos)
   adj_max_rate = max(temp$absolute_equal_parity[temp$nTot >= 1000 | temp$Pos > 10])
   temp = temp %>%
     mutate(maxRate = adj_max_rate) %>%
     mutate(relative_equal_parity = ifelse(maxRate <= 1e-50, 1, absolute_equal_parity / maxRate)) %>%
-    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_equal_parity < 0.1))
+    mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_equal_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_equal_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
   return(temp %>% select(!!as.name(featureName), absolute_equal_parity,
@@ -486,11 +488,12 @@ getBiasMetricSummary = function(merged_data, profit_curve, protected_feature) {
       bias = calcBiasMetric(fn, merged_data, protected_feature, thresh) %>%
         filter(fairness != 'Not Enough Data')
       metric = names(bias)[3]
-      gb = mean(bias[, 3] < 0.8)
-      asb = mean(unlist(bias[bias[, 3] < 0.8, 3]))
       if (nrow(bias) == 0) {
         gb = NA
         asb = NA
+      } else {
+        gb = mean(bias[, 3] < 0.8)
+        asb = mean(unlist(bias[bias[, 3] < 0.8, 3]))
       }
       result = tibble(protectedFeature = protected_feature,
                       biasMetric = metric,

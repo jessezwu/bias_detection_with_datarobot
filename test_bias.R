@@ -452,7 +452,7 @@ ggplot(data = leaderboard) +
 # show the effect of removing zip_code upon profit curve
 training_predictions_V1 <- getStackedPredictions(project, model_V1)
 merged_data_V1 = bind_cols(trainingData, training_predictions_V1)
-profit_curve_V1 = getProfitCurve(merged_data_V1, target, payoff_matrix)
+profit_curve_V1 = getProfitCurve(merged_data_V1, project, payoff_matrix)
 optimal_threshold_profit_V1 = profit_curve_V1$threshold[which.max(profit_curve_V1$profit)]
 merged_data_V1 = merged_data_V1 %>%
   mutate(positiveResult = ifelse(class_Yes <= optimal_threshold_profit_V1, 'Pos', 'Neg'))
@@ -510,7 +510,9 @@ for (featureName in protected) {
 # remove bias 2: vary the global decision threshold
 ###########################################################################################
 
-profit_curve = getProfitCurve(mergedData, target, payoff_matrix)
+profit_curve = getProfitCurve(mergedData, project, payoff_matrix)
+# take at most 100 points for the sake of speed
+profit_curve = profit_curve[seq(1, nrow(profit_curve), ceiling(nrow(profit_curve) / 100)),]
 bias_metric_summary = bind_rows(lapply(protected, function(protected_feature) {
   return(getBiasMetricSummary(mergedData, profit_curve, protected_feature))
 }))
