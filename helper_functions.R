@@ -333,7 +333,7 @@ plotFavorableClassBalance = function(dat, title = 'Favorable Class Balance', abs
                      metric_name = metric_name)
 }
 # plot unfavorable class balance
-plotFavorableClassBalance = function(dat, title = 'Unfavorable Class Balance', absolute = TRUE) {
+plotUnfavorableClassBalance = function(dat, title = 'Unfavorable Class Balance', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
   plotFairnessMetric(dat, title,
