@@ -133,7 +133,7 @@ for (featureName in protected) {
 # calculate and plot favorable class balance
 for (featureName in protected) {
   ucb = getUnfavorableClassBalance(mergedData, featureName, optimalThresholdForProfit)
-  plotFavorableClassBalance(ucb)
+  plotUnfavorableClassBalance(ucb)
 }
 
 # calculate and plot true favorable rate parity
