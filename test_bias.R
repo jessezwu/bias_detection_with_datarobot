@@ -898,6 +898,36 @@ ggplot(data = profitCurve_reweightedV2, aes(x = threshold, y = profit)) +
   ggtitle('Profit Curve') +
   scale_y_continuous(labels=scales::dollar_format())
 
+
+###########################################################################################
+# remove bias 5 version 3: use the aif360 library
+###########################################################################################
+
+
+#library(aif360)
+#install_aif360()
+#load_aif360_lib()
+
+#reticulate::conda_create(envname = "r-test")
+#reticulate::use_miniconda(condaenv = "r-test", required = TRUE)
+#aif360::install_aif360(envname = "r-test")
+#library(aif360)
+#reticulate::use_miniconda(condaenv = "r-test", required = TRUE)
+#load_aif360_lib()
+
+
+#reticulate::use_miniconda(condaenv = "r-reticulate", required = TRUE)
+#load_aif360_lib()
+
+# format the dataset
+formatted_dataset <- aif360::aif_dataset(data_path = filename,
+                                         favor_label = 'No',
+                                         unfavor_label = 'Yes',
+                                         unprivileged_protected_attribute = 'Female',
+                                         privileged_protected_attribute = 'Male',
+                                         target_column = "is_bad",
+                                         protected_attribute = "gender")
+
 ###########################################################################################
 # remove bias 6: rejection option-based classification
 ###########################################################################################
