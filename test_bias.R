@@ -725,7 +725,7 @@ print(comparison)
 ###########################################################################################
 # remove bias 5: reweighting
 # the results of this approach are rather disappointing because there is not much 
-#    proporitonal disparity in the raw data, but lots in the predictions
+#    proportional disparity in the raw data, but lots in the predictions
 ###########################################################################################
 # TO DO: replicate this methodology
 # https://towardsdatascience.com/reweighing-the-adult-dataset-to-make-it-discrimination-free-44668c9379e8
