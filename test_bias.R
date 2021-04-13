@@ -724,6 +724,8 @@ print(comparison)
 
 ###########################################################################################
 # remove bias 5: reweighting
+# the results of this approach are rather disappointing because there is not much 
+#    proporitonal disparity in the raw data, but lots in the predictions
 ###########################################################################################
 # TO DO: replicate this methodology
 # https://towardsdatascience.com/reweighing-the-adult-dataset-to-make-it-discrimination-free-44668c9379e8
@@ -805,132 +807,139 @@ for (featureName in head(protected, 1)) {
   plotProportionalParity(pp)
 }
 
-###########################################################################################
-# remove bias 5 version 2: reweighted using thresholded predictions from biased model
-###########################################################################################
-
-# step 1: create a contingency table for the outcomes
-contingency_tableV2 = mergedData %>%
-  mutate(Preferred = ifelse(class_Yes < optimalThresholdForProfit, 'Positive', 'Negative')) %>%
-  group_by(gender, Preferred) %>%
-  summarise(Count = n(), .groups = 'drop') %>%
-  pivot_wider(id_cols = c(gender), names_from = c(Preferred), values_from = Count) %>%
-  mutate(nTotal = Positive + Negative) %>%
-  mutate(ProbPositive = Positive / nTotal)
-
-# step 2: which group is the privileged group?
-privilegedV2 = contingency_tableV2$gender[which.max(contingency_tableV2$ProbPositive)]
-
-# step 3: calculate the weights
-weights_tableV2 = mergedData %>%
-  mutate(Preferred = ifelse(class_Yes < optimalThresholdForProfit, 'Positive', 'Negative')) %>%
-  group_by(gender, Preferred) %>%
-  summarise(Count = n(), .groups = 'drop')
-weights_tableV2 = weights_tableV2 %>%
-  mutate(Weights = sapply(seq_len(nrow(weights_tableV2)), function(r) {
-    N1 = sum(weights_tableV2$Count[weights_tableV2$gender == weights_tableV2$gender[r]])
-    N2 = sum(weights_tableV2$Count[weights_tableV2$Preferred == weights_tableV2$Preferred[r]])
-    N3 = sum(weights_tableV2$Count)
-    N4 = weights_tableV2$Count[r]
-    return((N1 * N2) / (N3 * N4))
-  }))
-
-# step 4: create a training dataset with these weights for each row
-raw_data = read_csv(filename)
-weighted_dataV2 = raw_data %>%
-  left_join(weights_tableV2 %>% 
-              mutate(is_bad = ifelse(Preferred == 'Positive', 'No', 'Yes')) %>%
-              select(gender, is_bad, Weights), 
-            by = c('gender', 'is_bad'))
-
-# step 5: build a new project with this weighted dataset
-project_reweightedV2 <- SetupProject(weighted_dataV2, 'Bias Demo - Reweighting')
-featurelists_reweightedV2 <- ListFeaturelists(project_reweightedV2)
-informative_reweightedV2 <- keep(featurelists_reweightedV2, function(x) grepl('Informative', x$name))
-# remove protected features, and predefined leakage
-no_protected_reweightedV2 <- informative_reweightedV2 %>%
-  extract2(1) %>%
-  extract2('features') %>%
-  setdiff(c(target, leakage, protected))
-features_reweightedV2 <- CreateFeaturelist(project_reweightedV2, 'Protected Removed', no_protected_reweightedV2)
-# project settings, note bias and fairness is currently only supported through the REST API
-# for documentation, see:
-# https://app.datarobot.com/apidocs/autodoc/api_reference.html#patch--api-v2-projects-(projectId)-aim-
-settings_reweightedV2 <- list(
-  target = target,
-  mode = 'quick',
-  featurelistId = features_reweightedV2$featurelistId,
-  protectedFeatures = as.list(protected),
-  preferableTargetValue = preferable_outcome,
-  fairnessMetricsSet = fairness_metric,
-  weights = 'Weights'
-)
-# run project
-response <- datarobot:::DataRobotPATCH(
-  datarobot:::UrlJoin("projects", project_reweightedV2$projectId, "aim"),
-  body = settings_reweightedV2,
-  encode = 'json',
-  returnRawResponse = TRUE
-)
-UpdateProject(project_reweightedV2, workerCount = 'max')
-WaitForAutopilot(project_reweightedV2)
-
-# step 6: show proportional parity
-# download the stacked predictions on the weighted training data
-best_model_reweightedV2 <- GetModelRecommendation(project_reweightedV2, 'Recommended for Deployment')
-model_reweightedV2 <- GetModel(best_model_reweightedV2$projectId, best_model_reweightedV2$modelId)
-trainingPredictions_reweightedV2 <- getStackedPredictions(project_reweightedV2, model_reweightedV2)
-hist(trainingPredictions_reweightedV2$class_Yes)
-# merge the training predictions with the training data
-merged_data_reweightedV2 = bind_cols(weighted_dataV2, trainingPredictions_reweightedV2)
-for (featureName in head(protected, 1)) {
-  pp = getProportionalParity(merged_data_reweightedV2, featureName, optimalThresholdForProfit)
-  plotProportionalParity(pp)
-}
-
 # step 7: show profit curve
 # get the profit curve
-project_reweightedV2 = GetProject(project_reweightedV2$projectId)   # make the project into a full project object
-profitCurve_reweightedV2 <- getProfitCurve(merged_data_reweightedV2, project_reweightedV2, payoff_matrix)
-optimalThresholdForProfit_reweightedV2 = profitCurve_reweightedV2$threshold[which.max(profitCurve_reweightedV2$profit)]
-ggplot(data = profitCurve_reweightedV2, aes(x = threshold, y = profit)) +
+project_reweighted = GetProject(project_reweighted$projectId)   # make the project into a full project object
+profitCurve_reweighted <- getProfitCurve(merged_data_reweighted, project_reweighted, payoff_matrix)
+optimalThresholdForProfit_reweighted = profitCurve_reweighted$threshold[which.max(profitCurve_reweighted$profit)]
+ggplot(data = profitCurve_reweighted, aes(x = threshold, y = profit)) +
   geom_line() +
   ggtitle('Profit Curve') +
   scale_y_continuous(labels=scales::dollar_format())
 
+# ###########################################################################################
+# # remove bias 5 version 2: reweighted using thresholded predictions from biased model
+# # this method is incorrect and results in a model with no predictive power!
+# ###########################################################################################
+# 
+# # step 1: create a contingency table for the outcomes
+# contingency_tableV2 = mergedData %>%
+#   mutate(Preferred = ifelse(class_Yes < optimalThresholdForProfit, 'Positive', 'Negative')) %>%
+#   group_by(gender, Preferred) %>%
+#   summarise(Count = n(), .groups = 'drop') %>%
+#   pivot_wider(id_cols = c(gender), names_from = c(Preferred), values_from = Count) %>%
+#   mutate(nTotal = Positive + Negative) %>%
+#   mutate(ProbPositive = Positive / nTotal)
+# 
+# # step 2: which group is the privileged group?
+# privilegedV2 = contingency_tableV2$gender[which.max(contingency_tableV2$ProbPositive)]
+# 
+# # step 3: calculate the weights
+# weights_tableV2 = mergedData %>%
+#   mutate(Preferred = ifelse(class_Yes < optimalThresholdForProfit, 'Positive', 'Negative')) %>%
+#   group_by(gender, Preferred) %>%
+#   summarise(Count = n(), .groups = 'drop')
+# weights_tableV2 = weights_tableV2 %>%
+#   mutate(Weights = sapply(seq_len(nrow(weights_tableV2)), function(r) {
+#     N1 = sum(weights_tableV2$Count[weights_tableV2$gender == weights_tableV2$gender[r]])
+#     N2 = sum(weights_tableV2$Count[weights_tableV2$Preferred == weights_tableV2$Preferred[r]])
+#     N3 = sum(weights_tableV2$Count)
+#     N4 = weights_tableV2$Count[r]
+#     return((N1 * N2) / (N3 * N4))
+#   }))
+# 
+# # step 4: create a training dataset with these weights for each row
+# raw_data = read_csv(filename)
+# weighted_dataV2 = raw_data %>%
+#   left_join(weights_tableV2 %>% 
+#               mutate(is_bad = ifelse(Preferred == 'Positive', 'No', 'Yes')) %>%
+#               select(gender, is_bad, Weights), 
+#             by = c('gender', 'is_bad'))
+# 
+# # step 5: build a new project with this weighted dataset
+# project_reweightedV2 <- SetupProject(weighted_dataV2, 'Bias Demo - Reweighting')
+# featurelists_reweightedV2 <- ListFeaturelists(project_reweightedV2)
+# informative_reweightedV2 <- keep(featurelists_reweightedV2, function(x) grepl('Informative', x$name))
+# # remove protected features, and predefined leakage
+# no_protected_reweightedV2 <- informative_reweightedV2 %>%
+#   extract2(1) %>%
+#   extract2('features') %>%
+#   setdiff(c(target, leakage, protected))
+# features_reweightedV2 <- CreateFeaturelist(project_reweightedV2, 'Protected Removed', no_protected_reweightedV2)
+# # project settings, note bias and fairness is currently only supported through the REST API
+# # for documentation, see:
+# # https://app.datarobot.com/apidocs/autodoc/api_reference.html#patch--api-v2-projects-(projectId)-aim-
+# settings_reweightedV2 <- list(
+#   target = target,
+#   mode = 'quick',
+#   featurelistId = features_reweightedV2$featurelistId,
+#   protectedFeatures = as.list(protected),
+#   preferableTargetValue = preferable_outcome,
+#   fairnessMetricsSet = fairness_metric,
+#   weights = 'Weights'
+# )
+# # run project
+# response <- datarobot:::DataRobotPATCH(
+#   datarobot:::UrlJoin("projects", project_reweightedV2$projectId, "aim"),
+#   body = settings_reweightedV2,
+#   encode = 'json',
+#   returnRawResponse = TRUE
+# )
+# UpdateProject(project_reweightedV2, workerCount = 'max')
+# WaitForAutopilot(project_reweightedV2)
+# 
+# # step 6: show proportional parity
+# # download the stacked predictions on the weighted training data
+# best_model_reweightedV2 <- GetModelRecommendation(project_reweightedV2, 'Recommended for Deployment')
+# model_reweightedV2 <- GetModel(best_model_reweightedV2$projectId, best_model_reweightedV2$modelId)
+# trainingPredictions_reweightedV2 <- getStackedPredictions(project_reweightedV2, model_reweightedV2)
+# hist(trainingPredictions_reweightedV2$class_Yes)
+# # merge the training predictions with the training data
+# merged_data_reweightedV2 = bind_cols(weighted_dataV2, trainingPredictions_reweightedV2)
+# for (featureName in head(protected, 1)) {
+#   pp = getProportionalParity(merged_data_reweightedV2, featureName, optimalThresholdForProfit)
+#   plotProportionalParity(pp)
+# }
+# 
+# # step 7: show profit curve
+# # get the profit curve
+# project_reweightedV2 = GetProject(project_reweightedV2$projectId)   # make the project into a full project object
+# profitCurve_reweightedV2 <- getProfitCurve(merged_data_reweightedV2, project_reweightedV2, payoff_matrix)
+# optimalThresholdForProfit_reweightedV2 = profitCurve_reweightedV2$threshold[which.max(profitCurve_reweightedV2$profit)]
+# ggplot(data = profitCurve_reweightedV2, aes(x = threshold, y = profit)) +
+#   geom_line() +
+#   ggtitle('Profit Curve') +
+#   scale_y_continuous(labels=scales::dollar_format())
+# 
 
 ###########################################################################################
 # remove bias 5 version 3: use the aif360 library
 ###########################################################################################
 
+# cannot use aif library because it doesn't support missing values!
 
-#library(aif360)
-#install_aif360()
-#load_aif360_lib()
-
-#reticulate::conda_create(envname = "r-test")
-#reticulate::use_miniconda(condaenv = "r-test", required = TRUE)
-#aif360::install_aif360(envname = "r-test")
-#library(aif360)
-#reticulate::use_miniconda(condaenv = "r-test", required = TRUE)
-#load_aif360_lib()
-
-
-#reticulate::use_miniconda(condaenv = "r-reticulate", required = TRUE)
-#load_aif360_lib()
-
-# format the dataset
-formatted_dataset <- aif360::aif_dataset(data_path = filename,
-                                         favor_label = 'No',
-                                         unfavor_label = 'Yes',
-                                         unprivileged_protected_attribute = 'Female',
-                                         privileged_protected_attribute = 'Male',
-                                         target_column = "is_bad",
-                                         protected_attribute = "gender")
+# reticulate::use_condaenv('r-reticulate')
+# #aif360::install_aif360(envname = 'r-reticulate')
+# library(aif360)
+# load_aif360_lib()
+# 
+# # format the dataset
+# dat = trainingData %>%
+#   mutate(is_bad = ifelse(is_bad == 'Yes', 1, 0))
+# # the next line throws an error because aif doesn't support missing values!
+# formatted_dataset <- aif360::aif_dataset(data_path = dat,
+#                                          favor_label = 0,
+#                                          unfavor_label = 1,
+#                                          unprivileged_protected_attribute = 'Female',
+#                                          privileged_protected_attribute = 'Male',
+#                                          target_column = "is_bad",
+#                                          protected_attribute = "gender")
 
 ###########################################################################################
 # remove bias 6: rejection option-based classification
 ###########################################################################################
 # TO DO: replicate this methodology
 # https://towardsdatascience.com/reducing-ai-bias-with-rejection-option-based-classification-54fefdb53c2e
+
+# cannot use aif library because it doesn't support missing values!
 
