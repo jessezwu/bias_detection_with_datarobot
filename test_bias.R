@@ -479,7 +479,7 @@ plot_data = bind_rows(list(
 )) %>%
   mutate(Metric = gsub('relative_', '', Metric, fixed = TRUE)) %>%
   mutate(Metric = gsub('_', ' ', Metric, fixed = TRUE))
-ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric)) +
+ ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric)) +
   ggtitle('Varying Threshold for Controlling Gender Bias') +
   ylab('% Groups With Bias and % Max Profit') +
   xlab('Threshold')
