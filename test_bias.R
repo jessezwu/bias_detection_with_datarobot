@@ -839,8 +839,8 @@ weights_tableV2 = weights_tableV2 %>%
 raw_data = read_csv(filename)
 weighted_dataV2 = raw_data %>%
   left_join(weights_tableV2 %>% 
-              select(gender, Preferred, Weights) %>% 
-              mutate(is_bad = ifelse(Preferred == 'Positive', 'No', 'Yes')), 
+              mutate(is_bad = ifelse(Preferred == 'Positive', 'No', 'Yes')) %>%
+              select(gender, is_bad, Weights), 
             by = c('gender', 'is_bad'))
 
 # step 5: build a new project with this weighted dataset
@@ -880,12 +880,23 @@ WaitForAutopilot(project_reweightedV2)
 best_model_reweightedV2 <- GetModelRecommendation(project_reweightedV2, 'Recommended for Deployment')
 model_reweightedV2 <- GetModel(best_model_reweightedV2$projectId, best_model_reweightedV2$modelId)
 trainingPredictions_reweightedV2 <- getStackedPredictions(project_reweightedV2, model_reweightedV2)
+hist(trainingPredictions_reweightedV2$class_Yes)
 # merge the training predictions with the training data
 merged_data_reweightedV2 = bind_cols(weighted_dataV2, trainingPredictions_reweightedV2)
 for (featureName in head(protected, 1)) {
   pp = getProportionalParity(merged_data_reweightedV2, featureName, optimalThresholdForProfit)
   plotProportionalParity(pp)
 }
+
+# step 7: show profit curve
+# get the profit curve
+project_reweightedV2 = GetProject(project_reweightedV2$projectId)   # make the project into a full project object
+profitCurve_reweightedV2 <- getProfitCurve(merged_data_reweightedV2, project_reweightedV2, payoff_matrix)
+optimalThresholdForProfit_reweightedV2 = profitCurve_reweightedV2$threshold[which.max(profitCurve_reweightedV2$profit)]
+ggplot(data = profitCurve_reweightedV2, aes(x = threshold, y = profit)) +
+  geom_line() +
+  ggtitle('Profit Curve') +
+  scale_y_continuous(labels=scales::dollar_format())
 
 ###########################################################################################
 # remove bias 6: rejection option-based classification
