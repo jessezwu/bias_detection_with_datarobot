@@ -572,6 +572,8 @@ for (protected_feature in protected) {
 threshold_tables = bind_rows(threshold_tables)
 
 # reframe the payoffs so that positive means a preferred outcome
+# TO DO: make this consistent across the entire script?
+# TO DO: or make positive a default?
 payoffs = list(
   TP = 1500,
   FP = -10000,
@@ -681,7 +683,7 @@ print(matching_thresholds[which.max(matching_thresholds$TotalProfit), profit_col
 
 # plot the relationship between the profit curve vs. unfair bias metrics
 iCols = 3 * seq_len(length(groups))
-apply(threshold_columns[, iCols], 1, max)
+apply(matching_thresholds[, iCols], 1, max)
 plot_data = matching_thresholds %>%
   mutate(rangeMetrics = do.call(pmax, matching_thresholds[, iCols]) - do.call(pmin, matching_thresholds[, iCols])) %>%
   select(TotalProfit, rangeMetrics)
@@ -691,7 +693,21 @@ ggplot() +
   xlab('Profit') +
   ylab('Variation in Proportional Parity')
 
-# TO DO: create what-if scenarios and show that this approach creates disparate treatment
+# create a what-if scenario and show that this approach creates disparate treatment
+varying_thresholds = matching_thresholds[which.max(matching_thresholds$TotalProfit), threshold_columns]
+names(varying_thresholds) = substring(names(varying_thresholds), 3)
+# find an example with a predicted 15% probability of default
+example = mergedData %>%
+  filter(class_Yes >= 0.15) %>%
+  arrange(class_Yes) %>%
+  slice(1)
+print(example %>% select(member_id, is_bad, class_Yes, race, annual_inc, revol_util, addr_state, desc))
+prediction = example$class_No
+# with varying races, would this applicant be accepted for a loan?
+comparison = tibble(Race = names(varying_thresholds), Threshold = unname(unlist(varying_thresholds[1, ]))) %>%
+                mutate(Accept = ifelse(prediction > Threshold, 'Yes', 'No'))
+print(comparison)
+
 # TO DO: plot the relationship between group proportional outcomes vs. group accuracy
 # TO DO: repeat the process to show how optimising proportional outcomes has quite different results to optimizing group accuracy
 
