@@ -1,0 +1,57 @@
+---
+title: "Bias Template"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(datarobot)
+library(tidyverse)
+library(magrittr)
+library(httr)
+library(ggplot2)
+library(scales)
+library(creditmodel)
+library(lubridate)
+library(anytime)
+library(ggrepel)
+library(ggwordcloud)
+library(yaml)
+source('helper_functions.R')
+source('project_helpers.R')
+```
+
+# Project Setup
+
+```{r project_config, echo=FALSE}
+config <- read_yaml('config/project_config.yaml')
+print(config)
+```
+
+# Feature cleaning and initial model
+
+Create a DataRobot project, and:
+
+1. Automatically remove non-informative features
+2. Look for and remove target leakage columns
+3. Explicitly Remove protected features
+4. Run an autopilot
+
+
+```{r setup_project}
+# If this project already exists, load it instead of re-running.
+tryCatch({
+    project <- load_project(config$project_name)
+  },
+  error = function(e) {
+    source('0_setup.R')
+  }
+)
+```
+
+# Accuracy and initial bias measurement
+
+```{r acc_bias_measure}
+# If this project already exists, load it instead of re-running.
+source('1_measure_bias.R')
+```

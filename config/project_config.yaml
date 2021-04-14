@@ -10,3 +10,8 @@ preferable_outcome: 'No'
 fairness_metric: 'predictionBalance'
 # protected features
 protected: ['gender', 'race']
+# profit values corresponding to quadrants of confusion matrix
+tp_value: 0       # no bad loan, no loss
+tn_value: 1500    # good loan written, $1500 profit made
+fp_value: 0       # no good loan written, opportunity cost $1500 in profit, but net payoff is zero
+fn_value: -10000  # bad loan written, $10000 in loan write-offs

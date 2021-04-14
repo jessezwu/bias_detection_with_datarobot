@@ -2,7 +2,6 @@ library(datarobot)
 library(magrittr)
 library(purrr)
 library(yaml)
-
 source('project_helpers.R')
 
 config <- read_yaml('config/project_config.yaml')

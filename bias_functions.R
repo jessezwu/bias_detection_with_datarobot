@@ -3,11 +3,22 @@
 # Helper functions
 #
 ##################################################
+library(datarobot)
+library(tidyverse)
+library(magrittr)
+library(httr)
+library(ggplot2)
+library(scales)
+library(creditmodel)
+library(lubridate)
+library(anytime)
+library(ggrepel)
+library(ggwordcloud)
 
-# TODO: get rid of Class_Yes
+# TODO: get rid of class_Yes
 
-null.is.na = function(x) { return(ifelse(is.null(x), NA, x))}
-featureinfo.as.data.frame = function(x) {
+null.is.na <- function(x) { return(ifelse(is.null(x), NA, x))}
+featureinfo.as.data.frame <- function(x) {
   result = tibble(
     id = x$id,
     name = x$name,
@@ -52,11 +63,11 @@ featureinfo.as.data.frame = function(x) {
   tibble::validate_tibble(result)
   return(result)
 }
-featureinfolist.as.data.frame = function(x) {
+featureinfolist.as.data.frame <- function(x) {
   return(bind_rows(lapply(x, featureinfo.as.data.frame)))
 }
 
-getStackedPredictions = function(project, model) {
+getStackedPredictions <- function(project, model) {
   predictions <- ListTrainingPredictions(project)
   predictionId <- unlist(lapply(predictions, function(x)
     if(x$modelId == model$modelId && x$dataSubset == 'all') return(x$id) else return(NULL)))
@@ -73,7 +84,7 @@ getStackedPredictions = function(project, model) {
 
 
 # create a payoff matrix
-CreatePayoffMatrix = function (project, matrix_name = 'new payoff matrix',
+CreatePayoffMatrix <- function (project, matrix_name = 'new payoff matrix',
                                TP_value = 1, TN_value = 1, FP_value = 1, FN_value = 1)
 {
   projectId <- datarobot:::ValidateProject(project)
@@ -88,13 +99,18 @@ CreatePayoffMatrix = function (project, matrix_name = 'new payoff matrix',
   return(payoff_matrix)
 }
 
-
-# get the profit curve
-getProfitCurve = function(merged_data, project, payoff_matrix) {
-  tibble(
+# pull target and prediction given project definitions
+getCleanedNames <- function(merged_data, project) {
+  merged_data %>%
+    mutate(
       target = merged_data %>% extract2(project$target) == project$positiveClass,
       probability = merged_data %>% extract2(paste0('class_', project$positiveClass))
-    ) %>%
+    )
+}
+
+# get the profit curve
+getProfitCurve <- function(merged_data, project, payoff_matrix) {
+  getCleanedNames(merged_data, project) %>%
     arrange(probability) %>%
     mutate(
       positives = sum(target), # constant
@@ -120,7 +136,7 @@ getProfitCurve = function(merged_data, project, payoff_matrix) {
     )
 }
 
-plotProfitCurveComparison = function(pc1, pc1_label, pc2, pc2_label) {
+plotProfitCurveComparison <- function(pc1, pc1_label, pc2, pc2_label) {
   plot_data = bind_rows(list(pc1 %>% mutate(Model = pc1_label),
                              pc2 %>% mutate(Model = pc2_label))) %>%
     mutate(Model = factor(Model, levels = c(pc1_label, pc2_label)))
@@ -133,23 +149,23 @@ plotProfitCurveComparison = function(pc1, pc1_label, pc2, pc2_label) {
 }
 
 # binary accuracy given a threshold
-getClassificationAccuracy = function(thresh) {
-  temp = tibble(target = mergedData[, target], probability = mergedData$class_Yes) %>%
-    mutate(confusion = ifelse(probability > thresh & target == 'Yes', 'TP', '')) %>%
-    mutate(confusion = ifelse(probability <= thresh & target != 'Yes', 'TN', confusion)) %>%
-    mutate(confusion = ifelse(probability > thresh & target != 'Yes', 'FP', confusion)) %>%
-    mutate(confusion = ifelse(probability <= thresh & target == 'Yes', 'FN', confusion))
-  return(unlist(temp$confusion))
+getClassificationAccuracy <- function(merged_data, project, thresh) {
+  getCleanedNames(merged_data, project) %>%
+    mutate(confusion = ifelse(probability > thresh & target, 'TP', '')) %>%
+    mutate(confusion = ifelse(probability <= thresh & !target, 'TN', confusion)) %>%
+    mutate(confusion = ifelse(probability > thresh & !target, 'FP', confusion)) %>%
+    mutate(confusion = ifelse(probability <= thresh & target, 'FN', confusion)) %>%
+    extract2('confusion')
 }
 
 
 # calculate proportional parity
-getProportionalParity = function(merged_data, featureName, thresh) {
-  temp = merged_data %>%
-    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
-    group_by(!!as.name(featureName), positiveResult) %>%
+getProportionalParity <- function(merged_data, feature_name, thresh) {
+  temp <- getCleanedNames(merged_data, project) %>%
+    mutate(positiveResult = ifelse(probability <= thresh, 'Pos', 'Neg')) %>%
+    group_by(!!as.name(feature_name), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows, values_fill = 0)
+    pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveResult, values_from = nRows, values_fill = 0)
   if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
   if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
   temp = temp %>%
@@ -162,17 +178,17 @@ getProportionalParity = function(merged_data, featureName, thresh) {
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_proportional_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_proportional_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
-  return(temp %>% select(!!as.name(featureName), absolute_proportional_parity,
+  return(temp %>% select(!!as.name(feature_name), absolute_proportional_parity,
                          relative_proportional_parity, fairness))
 }
 
 # calculate equal parity
-getEqualParity = function(merged_data, featureName, thresh) {
+getEqualParity <- function(merged_data, feature_name, thresh) {
   temp = merged_data %>%
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
-    group_by(!!as.name(featureName), positiveResult) %>%
+    group_by(!!as.name(feature_name), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows, values_fill = 0)
+    pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveResult, values_from = nRows, values_fill = 0)
   if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
   if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
   temp = temp %>%
@@ -185,16 +201,16 @@ getEqualParity = function(merged_data, featureName, thresh) {
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_equal_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_equal_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
-  return(temp %>% select(!!as.name(featureName), absolute_equal_parity,
+  return(temp %>% select(!!as.name(feature_name), absolute_equal_parity,
                          relative_equal_parity, fairness))
 }
 
 # calculate favorable class balance
-getFavorableClassBalance = function(merged_data, featureName, thresh) {
+getFavorableClassBalance <- function(merged_data, feature_name, thresh) {
   temp = merged_data %>%
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
     filter(positiveResult == 'Pos') %>%
-    group_by(!!as.name(featureName)) %>%
+    group_by(!!as.name(feature_name)) %>%
     summarise(nTot = n(), aveScore = mean(class_Yes), .groups = 'drop') %>%
     mutate(absolute_favorable_class_balance = aveScore)
   adj_max_rate = 0
@@ -207,16 +223,16 @@ getFavorableClassBalance = function(merged_data, featureName, thresh) {
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_favorable_class_balance < 0.1)) %>%
     mutate(fairness = ifelse(relative_favorable_class_balance >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
-  return(temp %>% select(!!as.name(featureName), absolute_favorable_class_balance,
+  return(temp %>% select(!!as.name(feature_name), absolute_favorable_class_balance,
                          relative_favorable_class_balance, fairness))
 }
 
 # calculate favorable class balance
-getUnfavorableClassBalance = function(merged_data, featureName, thresh) {
+getUnfavorableClassBalance <- function(merged_data, feature_name, thresh) {
   temp = merged_data %>%
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
     filter(positiveResult == 'Neg') %>%
-    group_by(!!as.name(featureName)) %>%
+    group_by(!!as.name(feature_name)) %>%
     summarise(nTot = n(), aveScore = mean(class_Yes), .groups = 'drop') %>%
     mutate(absolute_unfavorable_class_balance = aveScore)
   adj_max_rate = 0
@@ -229,18 +245,18 @@ getUnfavorableClassBalance = function(merged_data, featureName, thresh) {
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_unfavorable_class_balance < 0.1)) %>%
     mutate(fairness = ifelse(relative_unfavorable_class_balance >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
-  return(temp %>% select(!!as.name(featureName), absolute_unfavorable_class_balance,
+  return(temp %>% select(!!as.name(feature_name), absolute_unfavorable_class_balance,
                          relative_unfavorable_class_balance, fairness))
 }
 
 # calculate true favorable rate parity
-getFavorableRateParity = function(merged_data, featureName, thresh) {
+getFavorableRateParity <- function(merged_data, feature_name, thresh) {
   temp = merged_data %>%
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
     filter(!!as.name(target) == preferable_outcome) %>%
-    group_by(!!as.name(featureName), positiveResult) %>%
+    group_by(!!as.name(feature_name), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows, values_fill = 0)
+    pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveResult, values_from = nRows, values_fill = 0)
   if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
   if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
   temp = temp %>%
@@ -256,18 +272,18 @@ getFavorableRateParity = function(merged_data, featureName, thresh) {
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_favorable_rate_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_favorable_rate_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
-  return(temp %>% select(!!as.name(featureName), absolute_favorable_rate_parity,
+  return(temp %>% select(!!as.name(feature_name), absolute_favorable_rate_parity,
                          relative_favorable_rate_parity, fairness))
 }
 
 # calculate true unfavorable rate parity
-getUnfavorableRateParity = function(merged_data, featureName, thresh) {
+getUnfavorableRateParity <- function(merged_data, feature_name, thresh) {
   temp = merged_data %>%
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
     filter(!!as.name(target) != preferable_outcome) %>%
-    group_by(!!as.name(featureName), positiveResult) %>%
+    group_by(!!as.name(feature_name), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveResult, values_from = nRows, values_fill = 0)
+    pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveResult, values_from = nRows, values_fill = 0)
   if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
   if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
   temp = temp %>%
@@ -283,19 +299,19 @@ getUnfavorableRateParity = function(merged_data, featureName, thresh) {
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_unfavorable_rate_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_unfavorable_rate_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
-  return(temp %>% select(!!as.name(featureName), absolute_unfavorable_rate_parity,
+  return(temp %>% select(!!as.name(feature_name), absolute_unfavorable_rate_parity,
                          relative_unfavorable_rate_parity, fairness))
 }
 
 # calculate favorable predictive value parity
-getFavorablePredictiveValueParity = function(merged_data, featureName, thresh) {
+getFavorablePredictiveValueParity <- function(merged_data, feature_name, thresh) {
   temp = merged_data %>%
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
     filter(positiveResult == 'Pos') %>%
     mutate(positiveTarget = ifelse(!!as.name(target) == preferable_outcome, 'Pos', 'Neg')) %>%
-    group_by(!!as.name(featureName), positiveTarget) %>%
+    group_by(!!as.name(feature_name), positiveTarget) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveTarget, values_from = nRows, values_fill = 0)
+    pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveTarget, values_from = nRows, values_fill = 0)
   if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
   if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
   temp = temp %>%
@@ -311,19 +327,19 @@ getFavorablePredictiveValueParity = function(merged_data, featureName, thresh) {
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_favorable_predictive_value_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_favorable_predictive_value_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
-  return(temp %>% select(!!as.name(featureName), absolute_favorable_predictive_value_parity,
+  return(temp %>% select(!!as.name(feature_name), absolute_favorable_predictive_value_parity,
                          relative_favorable_predictive_value_parity, fairness))
 }
 
 # calculate unfavorable predictive value parity
-getUnfavorablePredictiveValueParity = function(merged_data, featureName, thresh) {
+getUnfavorablePredictiveValueParity <- function(merged_data, feature_name, thresh) {
   temp = merged_data %>%
     mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
     filter(positiveResult != 'Pos') %>%
     mutate(positiveTarget = ifelse(!!as.name(target) == preferable_outcome, 'Pos', 'Neg')) %>%
-    group_by(!!as.name(featureName), positiveTarget) %>%
+    group_by(!!as.name(feature_name), positiveTarget) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
-    pivot_wider(id_cols = !!as.name(featureName), names_from = positiveTarget, values_from = nRows, values_fill = 0)
+    pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveTarget, values_from = nRows, values_fill = 0)
   if (! 'Pos' %in% names(temp)) temp = temp %>% mutate(Pos = 0)
   if (! 'Neg' %in% names(temp)) temp = temp %>% mutate(Neg = 0)
   temp = temp %>%
@@ -339,94 +355,103 @@ getUnfavorablePredictiveValueParity = function(merged_data, featureName, thresh)
     mutate(isSmall = (nTot < 100) | (nTot >= 100 & nTot <= 1000 & relative_unfavorable_predictive_value_parity < 0.1)) %>%
     mutate(fairness = ifelse(relative_unfavorable_predictive_value_parity >= 0.8, 'Above fairness threshold', 'Below fairness threshold')) %>%
     mutate(fairness = ifelse(isSmall, 'Not Enough Data', fairness))
-  return(temp %>% select(!!as.name(featureName), absolute_unfavorable_predictive_value_parity,
+  return(temp %>% select(!!as.name(feature_name), absolute_unfavorable_predictive_value_parity,
                          relative_unfavorable_predictive_value_parity, fairness))
 }
 
 #####################################################################################################################
 # generic purpose function for plotting fairness metrics
 # is called by wrapper functions specific to a type of metric
-plotFairnessMetric = function(dat, title, metric, metric_name) {
+plotFairnessMetric <- function(dat, title, metric, metric_name, feature_name) {
   labels = c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
   dat = dat %>% mutate(fairness = factor(as.character(fairness), levels = labels))
   colours = c('blue','red', 'grey')[labels %in% dat$fairness]
-  plt = ggplot(data = dat, aes(x = get(featureName), y = get(metric), fill = fairness)) +
+  plt = ggplot(data = dat, aes(x = get(feature_name), y = get(metric), fill = fairness)) +
     geom_col() +
     ggtitle(title) +
-    xlab(featureName) +
+    xlab(feature_name) +
     ylab(metric_name) +
     scale_fill_manual(values = colours)
   print(plt)
 }
 # plot proportional parity
-plotProportionalParity = function(dat, title = 'Proportional Parity', absolute = TRUE) {
+plotProportionalParity <- function(dat, feature_name, title = 'Proportional Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
   plotFairnessMetric(dat, title,
                      metric = paste0(tolower(prefix), '_proportional_parity'),
-                     metric_name = metric_name)
+                     metric_name = metric_name,
+                     feature_name = feature_name)
 }
 # plot equal parity
-plotEqualParity = function(dat, title = 'Equal Parity', absolute = TRUE) {
+plotEqualParity <- function(dat, feature_name, title = 'Equal Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, title,
+  plotFairnessMetric(dat, feature_name, title,
                      metric = paste0(tolower(prefix), '_equal_parity'),
-                     metric_name = metric_name)
+                     metric_name = metric_name,
+                     feature_name = feature_name)
 }
 # plot favorable class balance
-plotFavorableClassBalance = function(dat, title = 'Favorable Class Balance', absolute = TRUE) {
+plotFavorableClassBalance <- function(dat, feature_name, title = 'Favorable
+                                     Class Balance', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, title,
+  plotFairnessMetric(dat, feature_name, title,
                      metric = paste0(tolower(prefix), '_favorable_class_balance'),
-                     metric_name = metric_name)
+                     metric_name = metric_name,
+                     feature_name = feature_name)
 }
 # plot unfavorable class balance
-plotUnfavorableClassBalance = function(dat, title = 'Unfavorable Class Balance', absolute = TRUE) {
+plotUnfavorableClassBalance <- function(dat, feature_name, title = 'Unfavorable Class Balance', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, title,
+  plotFairnessMetric(dat, feature_name, title,
                      metric = paste0(tolower(prefix), '_unfavorable_class_balance'),
-                     metric_name = metric_name)
+                     metric_name = metric_name,
+                     feature_name = feature_name)
 }
 # plot favorable rate parity
-plotFavorableRateParity = function(dat, title = 'Favorable Rate Parity', absolute = TRUE) {
+plotFavorableRateParity <- function(dat, feature_name, title = 'Favorable Rate Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, title,
+  plotFairnessMetric(dat, feature_name, title,
                      metric = paste0(tolower(prefix), '_favorable_rate_parity'),
-                     metric_name = metric_name)
+                     metric_name = metric_name,
+                     feature_name = feature_name)
 }
 # plot unfavorable rate parity
-plotUnfavorableRateParity = function(dat, title = 'Unfavorable Rate Parity', absolute = TRUE) {
+plotUnfavorableRateParity <- function(dat, feature_name, title = 'Unfavorable Rate Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, title,
+  plotFairnessMetric(dat, feature_name, title,
                      metric = paste0(tolower(prefix), '_unfavorable_rate_parity'),
-                     metric_name = metric_name)
+                     metric_name = metric_name,
+                     feature_name = feature_name)
 }
 # plot favorable predictive value parity
-plotFavorablePredictiveValueParity = function(dat, title = 'Favorable Predictive Value Parity', absolute = TRUE) {
+plotFavorablePredictiveValueParity <- function(dat, feature_name, title = 'Favorable Predictive Value Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, title,
+  plotFairnessMetric(dat, feature_name, title,
                      metric = paste0(tolower(prefix), '_favorable_predictive_value_parity'),
-                     metric_name = metric_name)
+                     metric_name = metric_name,
+                     feature_name = feature_name)
 }
 # plot favorable predictive value parity
-plotUnfavorablePredictiveValueParity = function(dat, title = 'Unfavorable Predictive Value Parity', absolute = TRUE) {
+plotUnfavorablePredictiveValueParity <- function(dat, feature_name, title = 'Unfavorable Predictive Value Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, title,
+  plotFairnessMetric(dat, feature_name, title,
                      metric = paste0(tolower(prefix), '_unfavorable_predictive_value_parity'),
-                     metric_name = metric_name)
+                     metric_name = metric_name,
+                     feature_name = feature_name)
 }
 
 
 # generic purpose function for plotting fairness metric comparisons for two competing models
 # is called by wrapper functions specific to a type of metric
-plotBiasMetricComparison = function(dat1, label1, dat2, label2, title, metric)
+plotBiasMetricComparison <- function(dat1, label1, dat2, label2, title, metric)
 {
   feature_name = head(names(dat1), 1)
   plot_data = bind_rows(list(dat1 %>% mutate(Model = label1),
@@ -444,42 +469,42 @@ plotBiasMetricComparison = function(dat1, label1, dat2, label2, title, metric)
     theme(axis.text.x=element_text(angle=90,hjust=1))
   print(plt)
 }
-plotProportionalParityComparison = function(dat1, label1, dat2, label2) {
+plotProportionalParityComparison <- function(dat1, label1, dat2, label2) {
   title = 'Proportional Parity'
   metric = names(dat1)[3]
   plotBiasMetricComparison(dat1, label1, dat2, label2, title, metric)
 }
-plotEqualParityComparison = function(dat1, label1, dat2, label2) {
+plotEqualParityComparison <- function(dat1, label1, dat2, label2) {
   title = 'Equal Parity'
   metric = names(dat1)[3]
   plotBiasMetricComparison(dat1, label1, dat2, label2, title, metric)
 }
-plotFavorableClassBalanceComparison = function(dat1, label1, dat2, label2) {
+plotFavorableClassBalanceComparison <- function(dat1, label1, dat2, label2) {
   title = 'Favorable Class Balance'
   metric = names(dat1)[3]
   plotBiasMetricComparison(dat1, label1, dat2, label2, title, metric)
 }
-plotUnfavorableClassBalanceComparison = function(dat1, label1, dat2, label2) {
+plotUnfavorableClassBalanceComparison <- function(dat1, label1, dat2, label2) {
   title = 'Unfavorable Class Balance'
   metric = names(dat1)[3]
   plotBiasMetricComparison(dat1, label1, dat2, label2, title, metric)
 }
-plotFavorableRateParityComparison = function(dat1, label1, dat2, label2) {
+plotFavorableRateParityComparison <- function(dat1, label1, dat2, label2) {
   title = 'Favorable Rate Parity'
   metric = names(dat1)[3]
   plotBiasMetricComparison(dat1, label1, dat2, label2, title, metric)
 }
-plotUnfavorableRateParityComparison = function(dat1, label1, dat2, label2) {
+plotUnfavorableRateParityComparison <- function(dat1, label1, dat2, label2) {
   title = 'Unfavorable Rate Parity'
   metric = names(dat1)[3]
   plotBiasMetricComparison(dat1, label1, dat2, label2, title, metric)
 }
-plotFavorablePredictiveValueParityComparison = function(dat1, label1, dat2, label2) {
+plotFavorablePredictiveValueParityComparison <- function(dat1, label1, dat2, label2) {
   title = 'Favorable Predictive Value Parity'
   metric = names(dat1)[3]
   plotBiasMetricComparison(dat1, label1, dat2, label2, title, metric)
 }
-plotUnfavorablePredictiveValueParityComparison = function(dat1, label1, dat2, label2) {
+plotUnfavorablePredictiveValueParityComparison <- function(dat1, label1, dat2, label2) {
   title = 'Unfavorable Predictive Value Parity'
   metric = names(dat1)[3]
   plotBiasMetricComparison(dat1, label1, dat2, label2, title, metric)
@@ -495,7 +520,7 @@ biasMetricFunctions = c('getProportionalParity',
                         'getFavorablePredictiveValueParity',
                         'getUnfavorablePredictiveValueParity'
 )
-toMetricName = function(x) {
+toMetricName <- function(x) {
   i = which(x == biasMetricFunctions)
   names = c('Proportional Parity',
             'Equal Parity',
@@ -508,7 +533,7 @@ toMetricName = function(x) {
   )
   return(names[i])
 }
-calcBiasMetric = function(fn, merged_data, protected_feature, thresh) {
+calcBiasMetric <- function(fn, merged_data, protected_feature, thresh) {
   if (length(thresh) > 1) return(calcBiasMetricMultiThresh(fn, merged_data, protected_feature, thresh))
   if (fn == 'getProportionalParity') return(getProportionalParity(merged_data, protected_feature, thresh))
   if (fn == 'getEqualParity') return(getEqualParity(merged_data, protected_feature, thresh))
@@ -520,7 +545,7 @@ calcBiasMetric = function(fn, merged_data, protected_feature, thresh) {
   if (fn == 'getUnfavorablePredictiveValueParity') return(getUnfavorablePredictiveValueParity(merged_data, protected_feature, thresh))
   stop(paste0('Unknown function: ', fn))
 }
-calcBiasMetricMultiThresh = function(fn, merged_data, protected_feature, thresh) {
+calcBiasMetricMultiThresh <- function(fn, merged_data, protected_feature, thresh) {
   base_result = calcBiasMetric(fn, merged_data, protected_feature, thresh[1])
   for (i in 2:(length(thresh))) {
     next_result = calcBiasMetric(fn, merged_data, protected_feature, thresh[i])
@@ -532,7 +557,7 @@ calcBiasMetricMultiThresh = function(fn, merged_data, protected_feature, thresh)
   return(base_result)
 }
 
-getBiasMetricSummary = function(merged_data, profit_curve, protected_feature) {
+getBiasMetricSummary <- function(merged_data, profit_curve, protected_feature) {
   bias_metric_summary = bind_rows(lapply(biasMetricFunctions, function(fn) {
     bias_temp = bind_rows(lapply(profit_curve$threshold, function(thresh) {
       bias = calcBiasMetric(fn, merged_data, protected_feature, thresh) %>%

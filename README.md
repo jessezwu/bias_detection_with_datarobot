@@ -20,4 +20,4 @@ Project definitions should be defined in a yaml config file, e.g. `config/projec
 
 TODO
 
-Once satisfied, run `R -e "rmarkdown::render('report.Rmd')"`
+Once satisfied, run `./generate_report.sh`

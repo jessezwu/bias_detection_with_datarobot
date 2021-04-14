@@ -1,0 +1,14 @@
+install.packages(c(
+  'anytime',
+  'creditmodel',
+  'datarobot',
+  'ggplot2',
+  'ggrepel',
+  'ggwordcloud',
+  'httr',
+  'lubridate',
+  'magrittr',
+  'scales',
+  'tidyverse',
+  'yaml'
+))
