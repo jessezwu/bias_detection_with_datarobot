@@ -1,0 +1,12 @@
+project_name: 'Bias Demo'
+# modelling data
+filename: 'data/DR_Demo_LendingClub_Guardrails_Fairness.csv.zip'
+# modelling target
+target: 'is_bad'
+# value of favourable outcome
+preferable_outcome: 'No'
+# fairness metric for DataRobot UI
+# One of proportionalParity, equalParity, predictionBalance, trueFavorableAndUnfavorableRateParity or FavorableAndUnfavorablePredictiveValueParity
+fairness_metric: 'predictionBalance'
+# protected features
+protected: ['gender', 'race']

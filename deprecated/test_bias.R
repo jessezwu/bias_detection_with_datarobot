@@ -10,21 +10,24 @@ library(anytime)
 library(ggrepel)
 library(ggwordcloud)
 
+source('helper_functions.R')
+
 ################################################################################
 # Settings
 ################################################################################
 
+project_name <- 'Bias Demo'
 filename <- 'data/DR_Demo_LendingClub_Guardrails_Fairness.csv.zip'
 target <- 'is_bad'
-leakage <- 'loan_status'
 preferable_outcome <- 'No'
+
+leakage <- 'loan_status'
+
 fairness_metric <- 'predictionBalance'
 # One of proportionalParity, equalParity, predictionBalance, trueFavorableAndUnfavorableRateParity or FavorableAndUnfavorablePredictiveValueParity
 
 # load in list of protected features
 protected <- read_lines('protected_features.txt')
-
-source('helper_functions.R')
 
 ################################################################################
 # detect and remove leakage as well as protected features
@@ -32,7 +35,7 @@ source('helper_functions.R')
 
 # upload dataset to create a project
 # data <- read_csv(filename)
-project <- SetupProject(filename, 'Bias Demo')
+project <- SetupProject(filename, project_name)
 
 featurelists <- ListFeaturelists(project)
 informative <- keep(featurelists, function(x) grepl('Informative', x$name))
