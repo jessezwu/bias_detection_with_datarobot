@@ -501,8 +501,8 @@ ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric
   xlab('Threshold')
 
 # show the distribution of predictions for females vs males
-ggplot(mergedData, aes(x=class_Yes)) + 
-  geom_histogram(aes(color = gender, fill = gender), 
+ggplot(mergedData, aes(x=class_Yes)) +
+  geom_histogram(aes(color = gender, fill = gender),
                  position = "identity", bins = 30, alpha = 0.4) +
   scale_colour_manual(values = c('red1', 'darkblue')) +
   scale_fill_manual(values = c('red1', 'darkblue')) +
@@ -511,10 +511,10 @@ ggplot(mergedData, aes(x=class_Yes)) +
 # show the threshold effect on proportional parity for gender (where there are only two groups)
 ppGender = tibble(Threshold = 0.001 * seq_len(999)) %>%
             mutate(ProportionalParity = sapply(Threshold, function(thr) {
-              temp = getProportionalParity(mergedData, 'gender', thr) %>% 
+              temp = getProportionalParity(mergedData, 'gender', thr) %>%
                 filter(gender == 'Female')
               result = unname(unlist(temp[1, 2]))
-              return(result) 
+              return(result)
             }))
 ggplot(data = ppGender) +
   geom_line(aes(x = Threshold, y = ProportionalParity), colour = 'blue') +
@@ -523,8 +523,8 @@ ggplot(data = ppGender) +
 
 
 # show the distribution of predictions by race
-ggplot(mergedData, aes(x=class_Yes)) + 
-  geom_histogram(aes(color = race, fill = race), 
+ggplot(mergedData, aes(x=class_Yes)) +
+  geom_histogram(aes(color = race, fill = race),
                  position = "identity", bins = 30, alpha = 0.4) +
   ggtitle('Predictions by Race')
 
@@ -532,10 +532,10 @@ ggplot(mergedData, aes(x=class_Yes)) +
 # show the threshold effect on proportional parity for race = Black
 ppRace = tibble(Threshold = 0.001 * seq_len(999)) %>%
   mutate(ProportionalParity = sapply(Threshold, function(thr) {
-    temp = getProportionalParity(mergedData, 'race', thr) %>% 
+    temp = getProportionalParity(mergedData, 'race', thr) %>%
       filter(race == 'Black')
     result = unname(unlist(temp[1, 2]))
-    return(result) 
+    return(result)
   }))
 ggplot(data = ppRace) +
   geom_line(aes(x = Threshold, y = ProportionalParity), colour = 'blue') +
@@ -625,8 +625,8 @@ payoffs = list(
   TN = 0,
   FN = 0
 )
-groups = unname(unlist(merged_data %>% 
-                         group_by(!!as.name(protected_feature)) %>% 
+groups = unname(unlist(merged_data %>%
+                         group_by(!!as.name(protected_feature)) %>%
                          summarise(nRows = n()) %>%
                          arrange(desc(nRows)) %>%
                          select(!!protected_feature)))
@@ -678,7 +678,7 @@ roc_table = roc_table %>%
 # first optimise profit
 profit_optimisation = roc_table %>%
   group_by(!!as.name(protected_feature)) %>%
-  summarise(Profit = max(Profit)) %>% 
+  summarise(Profit = max(Profit)) %>%
   left_join(roc_table, by = c(protected_feature, 'Profit')) %>%
   group_by(!!as.name(protected_feature)) %>%
   summarise(optThreshold = round(median(threshold), 3), maxProfit = mean(Profit), .groups = 'drop')
@@ -732,7 +732,7 @@ apply(matching_thresholds[, iCols], 1, max)
 plot_data = matching_thresholds %>%
   mutate(rangeMetrics = do.call(pmax, matching_thresholds[, iCols]) - do.call(pmin, matching_thresholds[, iCols])) %>%
   select(TotalProfit, rangeMetrics)
-ggplot() + 
+ggplot() +
   geom_point(data = plot_data, aes(x = TotalProfit, y = rangeMetrics)) +
   ggtitle('Profit and Variation Bias Metrics Between Groups') +
   xlab('Profit') +
@@ -770,7 +770,7 @@ print(comparison)
 
 ###########################################################################################
 # remove bias 5: reweighting
-# the results of this approach are rather disappointing because there is not much 
+# the results of this approach are rather disappointing because there is not much
 #    proportional disparity in the raw data, but lots in the predictions
 ###########################################################################################
 # TO DO: replicate this methodology
@@ -867,7 +867,7 @@ ggplot(data = profitCurve_reweighted, aes(x = threshold, y = profit)) +
 # # remove bias 5 version 2: reweighted using thresholded predictions from biased model
 # # this method is incorrect and results in a model with no predictive power!
 # ###########################################################################################
-# 
+#
 # # step 1: create a contingency table for the outcomes
 # contingency_tableV2 = mergedData %>%
 #   mutate(Preferred = ifelse(class_Yes < optimalThresholdForProfit, 'Positive', 'Negative')) %>%
@@ -876,10 +876,10 @@ ggplot(data = profitCurve_reweighted, aes(x = threshold, y = profit)) +
 #   pivot_wider(id_cols = c(gender), names_from = c(Preferred), values_from = Count) %>%
 #   mutate(nTotal = Positive + Negative) %>%
 #   mutate(ProbPositive = Positive / nTotal)
-# 
+#
 # # step 2: which group is the privileged group?
 # privilegedV2 = contingency_tableV2$gender[which.max(contingency_tableV2$ProbPositive)]
-# 
+#
 # # step 3: calculate the weights
 # weights_tableV2 = mergedData %>%
 #   mutate(Preferred = ifelse(class_Yes < optimalThresholdForProfit, 'Positive', 'Negative')) %>%
@@ -893,15 +893,15 @@ ggplot(data = profitCurve_reweighted, aes(x = threshold, y = profit)) +
 #     N4 = weights_tableV2$Count[r]
 #     return((N1 * N2) / (N3 * N4))
 #   }))
-# 
+#
 # # step 4: create a training dataset with these weights for each row
 # raw_data = read_csv(filename)
 # weighted_dataV2 = raw_data %>%
-#   left_join(weights_tableV2 %>% 
+#   left_join(weights_tableV2 %>%
 #               mutate(is_bad = ifelse(Preferred == 'Positive', 'No', 'Yes')) %>%
-#               select(gender, is_bad, Weights), 
+#               select(gender, is_bad, Weights),
 #             by = c('gender', 'is_bad'))
-# 
+#
 # # step 5: build a new project with this weighted dataset
 # project_reweightedV2 <- SetupProject(weighted_dataV2, 'Bias Demo - Reweighting')
 # featurelists_reweightedV2 <- ListFeaturelists(project_reweightedV2)
@@ -933,7 +933,7 @@ ggplot(data = profitCurve_reweighted, aes(x = threshold, y = profit)) +
 # )
 # UpdateProject(project_reweightedV2, workerCount = 'max')
 # WaitForAutopilot(project_reweightedV2)
-# 
+#
 # # step 6: show proportional parity
 # # download the stacked predictions on the weighted training data
 # best_model_reweightedV2 <- GetModelRecommendation(project_reweightedV2, 'Recommended for Deployment')
@@ -946,7 +946,7 @@ ggplot(data = profitCurve_reweighted, aes(x = threshold, y = profit)) +
 #   pp = getProportionalParity(merged_data_reweightedV2, featureName, optimalThresholdForProfit)
 #   plotProportionalParity(pp)
 # }
-# 
+#
 # # step 7: show profit curve
 # # get the profit curve
 # project_reweightedV2 = GetProject(project_reweightedV2$projectId)   # make the project into a full project object
@@ -956,7 +956,7 @@ ggplot(data = profitCurve_reweighted, aes(x = threshold, y = profit)) +
 #   geom_line() +
 #   ggtitle('Profit Curve') +
 #   scale_y_continuous(labels=scales::dollar_format())
-# 
+#
 
 ###########################################################################################
 # remove bias 5 version 3: use the aif360 library
@@ -968,7 +968,7 @@ ggplot(data = profitCurve_reweighted, aes(x = threshold, y = profit)) +
 # #aif360::install_aif360(envname = 'r-reticulate')
 # library(aif360)
 # load_aif360_lib()
-# 
+#
 # # format the dataset
 # dat = trainingData %>%
 #   mutate(is_bad = ifelse(is_bad == 'Yes', 1, 0))

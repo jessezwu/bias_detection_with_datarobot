@@ -17,7 +17,6 @@ library(anytime)
 library(ggrepel)
 library(ggwordcloud)
 library(yaml)
-source('helper_functions.R')
 source('project_helpers.R')
 ```
 

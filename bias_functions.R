@@ -84,9 +84,8 @@ getStackedPredictions <- function(project, model) {
 
 
 # create a payoff matrix
-CreatePayoffMatrix <- function (project, matrix_name = 'new payoff matrix',
-                               TP_value = 1, TN_value = 1, FP_value = 1, FN_value = 1)
-{
+CreatePayoffMatrix <- function(project, matrix_name = 'new payoff matrix',
+                               TP_value = 1, TN_value = 1, FP_value = 1, FN_value = 1) {
   projectId <- datarobot:::ValidateProject(project)
   routeString <- datarobot:::UrlJoin("projects", projectId, "payoffMatrices")
   body = list(name = matrix_name,
@@ -98,6 +97,20 @@ CreatePayoffMatrix <- function (project, matrix_name = 'new payoff matrix',
   payoff_matrix = content(rawReturn)
   return(payoff_matrix)
 }
+# pull a previously created matrix
+GetPayoffMatrix <- function(project, matrix_name) {
+  projectId <- datarobot:::ValidateProject(project)
+  routeString <- datarobot:::UrlJoin("projects", projectId, "payoffMatrices")
+  rawReturn <- datarobot:::DataRobotGET(routeString, returnRawResponse = TRUE)
+  matrices <- content(rawReturn)$data %>%
+    keep(function(x) grepl(matrix_name, x$name))
+  if(length(matrices) > 0) {
+    matrices %>% extract2(1)
+  } else {
+    stop('The requested matrix does not exist')
+  }
+}
+
 
 # pull target and prediction given project definitions
 getCleanedNames <- function(merged_data, project) {
@@ -142,6 +155,7 @@ plotProfitCurveComparison <- function(pc1, pc1_label, pc2, pc2_label) {
     mutate(Model = factor(Model, levels = c(pc1_label, pc2_label)))
   plt = ggplot(data = plot_data, aes(x = threshold, y = profit, colour = Model)) +
     geom_line() +
+    theme_minimal() +
     ggtitle('Profit Curve Comparison') +
     scale_y_continuous(labels=scales::dollar_format()) +
     scale_colour_manual(values = c('blue', 'red'))
@@ -184,8 +198,8 @@ getProportionalParity <- function(merged_data, feature_name, thresh) {
 
 # calculate equal parity
 getEqualParity <- function(merged_data, feature_name, thresh) {
-  temp = merged_data %>%
-    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+  temp <- getCleanedNames(merged_data, project) %>%
+    mutate(positiveResult = ifelse(probability <= thresh, 'Pos', 'Neg')) %>%
     group_by(!!as.name(feature_name), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
     pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveResult, values_from = nRows, values_fill = 0)
@@ -207,8 +221,8 @@ getEqualParity <- function(merged_data, feature_name, thresh) {
 
 # calculate favorable class balance
 getFavorableClassBalance <- function(merged_data, feature_name, thresh) {
-  temp = merged_data %>%
-    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+  temp <- getCleanedNames(merged_data, project) %>%
+    mutate(positiveResult = ifelse(probability <= thresh, 'Pos', 'Neg')) %>%
     filter(positiveResult == 'Pos') %>%
     group_by(!!as.name(feature_name)) %>%
     summarise(nTot = n(), aveScore = mean(class_Yes), .groups = 'drop') %>%
@@ -229,8 +243,8 @@ getFavorableClassBalance <- function(merged_data, feature_name, thresh) {
 
 # calculate favorable class balance
 getUnfavorableClassBalance <- function(merged_data, feature_name, thresh) {
-  temp = merged_data %>%
-    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+  temp <- getCleanedNames(merged_data, project) %>%
+    mutate(positiveResult = ifelse(probability <= thresh, 'Pos', 'Neg')) %>%
     filter(positiveResult == 'Neg') %>%
     group_by(!!as.name(feature_name)) %>%
     summarise(nTot = n(), aveScore = mean(class_Yes), .groups = 'drop') %>%
@@ -250,10 +264,10 @@ getUnfavorableClassBalance <- function(merged_data, feature_name, thresh) {
 }
 
 # calculate true favorable rate parity
-getFavorableRateParity <- function(merged_data, feature_name, thresh) {
-  temp = merged_data %>%
-    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
-    filter(!!as.name(target) == preferable_outcome) %>%
+getFavorableRateParity <- function(merged_data, feature_name, thresh, config) {
+  temp <- getCleanedNames(merged_data, project) %>%
+    mutate(positiveResult = ifelse(probability <= thresh, 'Pos', 'Neg')) %>%
+    filter(!!as.name(config$target) == config$preferable_outcome) %>%
     group_by(!!as.name(feature_name), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
     pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveResult, values_from = nRows, values_fill = 0)
@@ -277,10 +291,10 @@ getFavorableRateParity <- function(merged_data, feature_name, thresh) {
 }
 
 # calculate true unfavorable rate parity
-getUnfavorableRateParity <- function(merged_data, feature_name, thresh) {
-  temp = merged_data %>%
-    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
-    filter(!!as.name(target) != preferable_outcome) %>%
+getUnfavorableRateParity <- function(merged_data, feature_name, thresh, config) {
+  temp <- getCleanedNames(merged_data, project) %>%
+    mutate(positiveResult = ifelse(probability <= thresh, 'Pos', 'Neg')) %>%
+    filter(!!as.name(config$target) != config$preferable_outcome) %>%
     group_by(!!as.name(feature_name), positiveResult) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
     pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveResult, values_from = nRows, values_fill = 0)
@@ -304,11 +318,11 @@ getUnfavorableRateParity <- function(merged_data, feature_name, thresh) {
 }
 
 # calculate favorable predictive value parity
-getFavorablePredictiveValueParity <- function(merged_data, feature_name, thresh) {
-  temp = merged_data %>%
-    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+getFavorablePredictiveValueParity <- function(merged_data, feature_name, thresh, config) {
+  temp <- getCleanedNames(merged_data, project) %>%
+    mutate(positiveResult = ifelse(probability <= thresh, 'Pos', 'Neg')) %>%
     filter(positiveResult == 'Pos') %>%
-    mutate(positiveTarget = ifelse(!!as.name(target) == preferable_outcome, 'Pos', 'Neg')) %>%
+    mutate(positiveTarget = ifelse(!!as.name(config$target) == config$preferable_outcome, 'Pos', 'Neg')) %>%
     group_by(!!as.name(feature_name), positiveTarget) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
     pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveTarget, values_from = nRows, values_fill = 0)
@@ -332,11 +346,11 @@ getFavorablePredictiveValueParity <- function(merged_data, feature_name, thresh)
 }
 
 # calculate unfavorable predictive value parity
-getUnfavorablePredictiveValueParity <- function(merged_data, feature_name, thresh) {
-  temp = merged_data %>%
-    mutate(positiveResult = ifelse(class_Yes <= thresh, 'Pos', 'Neg')) %>%
+getUnfavorablePredictiveValueParity <- function(merged_data, feature_name, thresh, config) {
+  temp <- getCleanedNames(merged_data, project) %>%
+    mutate(positiveResult = ifelse(probability <= thresh, 'Pos', 'Neg')) %>%
     filter(positiveResult != 'Pos') %>%
-    mutate(positiveTarget = ifelse(!!as.name(target) == preferable_outcome, 'Pos', 'Neg')) %>%
+    mutate(positiveTarget = ifelse(!!as.name(config$target) == config$preferable_outcome, 'Pos', 'Neg')) %>%
     group_by(!!as.name(feature_name), positiveTarget) %>%
     summarise(nRows = n(), .groups = 'drop') %>%
     pivot_wider(id_cols = !!as.name(feature_name), names_from = positiveTarget, values_from = nRows, values_fill = 0)
@@ -368,6 +382,7 @@ plotFairnessMetric <- function(dat, title, metric, metric_name, feature_name) {
   colours = c('blue','red', 'grey')[labels %in% dat$fairness]
   plt = ggplot(data = dat, aes(x = get(feature_name), y = get(metric), fill = fairness)) +
     geom_col() +
+    theme_minimal()
     ggtitle(title) +
     xlab(feature_name) +
     ylab(metric_name) +
@@ -387,7 +402,7 @@ plotProportionalParity <- function(dat, feature_name, title = 'Proportional Pari
 plotEqualParity <- function(dat, feature_name, title = 'Equal Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, feature_name, title,
+  plotFairnessMetric(dat, title,
                      metric = paste0(tolower(prefix), '_equal_parity'),
                      metric_name = metric_name,
                      feature_name = feature_name)
@@ -397,7 +412,7 @@ plotFavorableClassBalance <- function(dat, feature_name, title = 'Favorable
                                      Class Balance', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, feature_name, title,
+  plotFairnessMetric(dat, title,
                      metric = paste0(tolower(prefix), '_favorable_class_balance'),
                      metric_name = metric_name,
                      feature_name = feature_name)
@@ -406,7 +421,7 @@ plotFavorableClassBalance <- function(dat, feature_name, title = 'Favorable
 plotUnfavorableClassBalance <- function(dat, feature_name, title = 'Unfavorable Class Balance', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, feature_name, title,
+  plotFairnessMetric(dat, title,
                      metric = paste0(tolower(prefix), '_unfavorable_class_balance'),
                      metric_name = metric_name,
                      feature_name = feature_name)
@@ -415,7 +430,7 @@ plotUnfavorableClassBalance <- function(dat, feature_name, title = 'Unfavorable 
 plotFavorableRateParity <- function(dat, feature_name, title = 'Favorable Rate Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, feature_name, title,
+  plotFairnessMetric(dat, title,
                      metric = paste0(tolower(prefix), '_favorable_rate_parity'),
                      metric_name = metric_name,
                      feature_name = feature_name)
@@ -424,7 +439,7 @@ plotFavorableRateParity <- function(dat, feature_name, title = 'Favorable Rate P
 plotUnfavorableRateParity <- function(dat, feature_name, title = 'Unfavorable Rate Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, feature_name, title,
+  plotFairnessMetric(dat, title,
                      metric = paste0(tolower(prefix), '_unfavorable_rate_parity'),
                      metric_name = metric_name,
                      feature_name = feature_name)
@@ -433,7 +448,7 @@ plotUnfavorableRateParity <- function(dat, feature_name, title = 'Unfavorable Ra
 plotFavorablePredictiveValueParity <- function(dat, feature_name, title = 'Favorable Predictive Value Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, feature_name, title,
+  plotFairnessMetric(dat, title,
                      metric = paste0(tolower(prefix), '_favorable_predictive_value_parity'),
                      metric_name = metric_name,
                      feature_name = feature_name)
@@ -442,7 +457,7 @@ plotFavorablePredictiveValueParity <- function(dat, feature_name, title = 'Favor
 plotUnfavorablePredictiveValueParity <- function(dat, feature_name, title = 'Unfavorable Predictive Value Parity', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
-  plotFairnessMetric(dat, feature_name, title,
+  plotFairnessMetric(dat, title,
                      metric = paste0(tolower(prefix), '_unfavorable_predictive_value_parity'),
                      metric_name = metric_name,
                      feature_name = feature_name)
@@ -461,6 +476,7 @@ plotBiasMetricComparison <- function(dat1, label1, dat2, label2, title, metric)
   colours = c('blue','red', 'grey')[labels %in% plot_data$fairness]
   plt = ggplot(data = plot_data, aes(x = get(feature_name), y = get(metric), fill = fairness)) +
     geom_col() +
+    theme_minimal() +
     ggtitle(paste0(title, ' Comparison')) +
     xlab(feature_name) +
     ylab(paste0('Relative ', title)) +

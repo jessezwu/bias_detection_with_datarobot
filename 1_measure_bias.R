@@ -12,26 +12,32 @@ project <- load_project(config$project_name)
 ###########################################################################################
 
 best_model <- GetModelRecommendation(project, 'Recommended for Deployment')
+model <- GetModel(best_model$projectId, best_model$modelId)
 
 # Plot the ROC Curve
 roc_curve = GetRocCurve(model, DataPartition$VALIDATION, fallbackToParentInsights = TRUE)
-ggplot(roc_curve$rocPoints, aes(x=falsePositiveRate, y=truePositiveRate)) +
+plot <- ggplot(roc_curve$rocPoints, aes(x=falsePositiveRate, y=truePositiveRate)) +
   geom_point() +
   geom_abline(intercept = 0) +
   ggtitle('ROC Curve') +
   theme_minimal()
+print(plot)
 
 # create a profit curve
-payoff_matrix <- CreatePayoffMatrix(project, 'payoff matrix',
-  TP_value = config$tp_value,
-  TN_value = config$tn_value,
-  FP_value = config$fp_value,
-  FN_value = config$fn_value
-)
+payoff_matrix <- tryCatch({
+    GetPayoffMatrix(project, 'payoff matrix')
+  },
+  error = function(e) {
+    CreatePayoffMatrix(project, 'payoff matrix',
+      TP_value = config$tp_value,
+      TN_value = config$tn_value,
+      FP_value = config$fp_value,
+      FN_value = config$fn_value
+    )
+})
 
 # download the stacked predictions on the training data
 # we will manually calculate the profit, accuracy, and bias metrics
-model <- GetModel(best_model$projectId, best_model$modelId)
 training_predictions <- getStackedPredictions(project, model)
 
 # merge the training predictions with the training data
@@ -42,11 +48,13 @@ merged_data <- bind_cols(training_data, training_predictions)
 project <- GetProject(project$projectId)   # make the project into a full project object
 profit_curve <- getProfitCurve(merged_data, project, payoff_matrix)
 optimal_threshold_for_profit <- profit_curve$threshold[which.max(profit_curve$profit)]
-ggplot(data = profit_curve, aes(x = threshold, y = profit)) +
+plot <- ggplot(data = profit_curve, aes(x = threshold, y = profit)) +
   geom_line() +
   theme_minimal() +
   ggtitle('Profit Curve') +
   scale_y_continuous(labels=scales::dollar_format())
+print(plot)
+cat('Optimal threshold for profit:', optimal_threshold_for_profit, '\n')
 
 #new <- merged_data %>%
 #  mutate(positiveResult = ifelse(
@@ -58,7 +66,7 @@ ggplot(data = profit_curve, aes(x = threshold, y = profit)) +
 # get the confusion matrix using the optimal threshold for profit
 print('Using the optimal threshold for profit')
 confusion_matrix <- getClassificationAccuracy(merged_data, project, optimal_threshold_for_profit)
-table(confusion_matrix)
+print(table(confusion_matrix))
 
 # calculate fairness metrics using the optimal threshold for profit
 # https://app.datarobot.com/docs/modeling/investigate/bias/bias-ref.html#proportional-parity
@@ -89,25 +97,25 @@ for (feature in config$protected) {
 
 # calculate and plot true favorable rate parity
 for (feature in config$protected) {
-  frp <- getFavorableRateParity(merged_data, feature, optimal_threshold_for_profit)
+  frp <- getFavorableRateParity(merged_data, feature, optimal_threshold_for_profit, config)
   plotFavorableRateParity(frp, feature)
 }
 
 # calculate and plot true unfavorable rate parity
 for (feature in config$protected) {
-  urp <- getUnfavorableRateParity(merged_data, feature, optimal_threshold_for_profit)
+  urp <- getUnfavorableRateParity(merged_data, feature, optimal_threshold_for_profit, config)
   plotUnfavorableRateParity(urp, feature)
 }
 
 # calculate and plot favorable predictive value parity
 for (feature in config$protected) {
-  pvp <- getFavorablePredictiveValueParity(merged_data, feature, optimal_threshold_for_profit)
+  pvp <- getFavorablePredictiveValueParity(merged_data, feature, optimal_threshold_for_profit, config)
   plotFavorablePredictiveValueParity(pvp, feature)
 }
 
 # calculate and plot unfavorable predictive value parity
 for (feature in config$protected) {
-  upvp <- getUnfavorablePredictiveValueParity(merged_data, feature, optimal_threshold_for_profit)
+  upvp <- getUnfavorablePredictiveValueParity(merged_data, feature, optimal_threshold_for_profit, config)
   plotUnfavorablePredictiveValueParity(upvp, feature)
 }
 
