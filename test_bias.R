@@ -478,7 +478,7 @@ plot_data = bind_rows(list(
 )) %>%
   mutate(Metric = gsub('relative_', '', Metric, fixed = TRUE)) %>%
   mutate(Metric = gsub('_', ' ', Metric, fixed = TRUE))
- ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric)) +
+ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric)) +
   ggtitle('Varying Threshold for Controlling Gender Bias') +
   ylab('% Groups With Bias and % Max Profit') +
   xlab('Threshold')
@@ -496,6 +496,49 @@ ggplot() + geom_line(data = plot_data, aes(x = threshold, y = y, colour = Metric
   ggtitle('Varying Threshold for Controlling Racial Bias') +
   ylab('% Groups With Bias and % Max Profit') +
   xlab('Threshold')
+
+# show the distribution of predictions for females vs males
+ggplot(mergedData, aes(x=class_Yes)) + 
+  geom_histogram(aes(color = gender, fill = gender), 
+                 position = "identity", bins = 30, alpha = 0.4) +
+  scale_colour_manual(values = c('red1', 'darkblue')) +
+  scale_fill_manual(values = c('red1', 'darkblue')) +
+  ggtitle('Predictions by Gender')
+
+# show the threshold effect on proportional parity for gender (where there are only two groups)
+ppGender = tibble(Threshold = 0.001 * seq_len(999)) %>%
+            mutate(ProportionalParity = sapply(Threshold, function(thr) {
+              temp = getProportionalParity(mergedData, 'gender', thr) %>% 
+                filter(gender == 'Female')
+              result = unname(unlist(temp[1, 2]))
+              return(result) 
+            }))
+ggplot(data = ppGender) +
+  geom_line(aes(x = Threshold, y = ProportionalParity), colour = 'blue') +
+  ggtitle('Effect of Global Threshold on Gender Bias') +
+  ylab('Proportional Parity')
+
+
+# show the distribution of predictions by race
+ggplot(mergedData, aes(x=class_Yes)) + 
+  geom_histogram(aes(color = race, fill = race), 
+                 position = "identity", bins = 30, alpha = 0.4) +
+  ggtitle('Predictions by Race')
+
+
+# show the threshold effect on proportional parity for race = Black
+ppRace = tibble(Threshold = 0.001 * seq_len(999)) %>%
+  mutate(ProportionalParity = sapply(Threshold, function(thr) {
+    temp = getProportionalParity(mergedData, 'race', thr) %>% 
+      filter(race == 'Black')
+    result = unname(unlist(temp[1, 2]))
+    return(result) 
+  }))
+ggplot(data = ppRace) +
+  geom_line(aes(x = Threshold, y = ProportionalParity), colour = 'blue') +
+  ggtitle('Effect of Global Threshold on Racial Bias') +
+  ylab('Proportional Parity')
+
 
 ###########################################################################################
 # remove bias 3: vary decision threshold separately for each protected class
