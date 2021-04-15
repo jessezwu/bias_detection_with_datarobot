@@ -292,12 +292,12 @@ plotPSI <- function(plot_data) {
 # generic purpose function for plotting fairness metrics
 # is called by wrapper functions specific to a type of metric
 plotFairnessMetric <- function(dat, title, metric, metric_name, feature_name) {
-  labels = c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
-  dat = dat %>% mutate(fairness = factor(as.character(fairness), levels = labels))
-  colours = c('blue','red', 'grey')[labels %in% dat$fairness]
-  plt = ggplot(data = dat, aes(x = get(feature_name), y = get(metric), fill = fairness)) +
+  labels <- c('Above fairness threshold', 'Below fairness threshold', 'Not Enough Data')
+  dat <- dat %>% mutate(fairness = factor(as.character(fairness), levels = labels))
+  colours <- c('blue','red', 'grey')[labels %in% dat$fairness]
+  plt <- ggplot(data = dat, aes(x = get(feature_name), y = get(metric), fill = fairness)) +
     geom_col() +
-    theme_minimal()
+    theme_minimal() +
     ggtitle(title) +
     xlab(feature_name) +
     ylab(metric_name) +
