@@ -2,7 +2,6 @@ library(datarobot)
 library(tidyverse)
 library(yaml)
 source('project_helpers.R')
-source('datarobot_helpers.R')
 source('bias_functions.R')
 
 config <- read_yaml('config/project_config.yaml')
@@ -20,7 +19,6 @@ training_predictions <- getStackedPredictions(project, model)
 # merge the training predictions with the training data
 training_data <- read_csv(config$filename)
 merged_data <- bind_cols(training_data, training_predictions)
-
 
 # get a list of the features used in our chosen model
 feature_list <- GetFeaturelist(project, model$featurelistId)
@@ -48,7 +46,6 @@ raw_features <- input_features
 for (r in seq_len(nrow(engineered_date_features)))
   raw_features <- gsub(engineered_date_features$engineered[r], engineered_date_features$raw[r], raw_features, fixed = TRUE)
 raw_features <- unique(raw_features)
-
 
 # get cross-class data disparity for protected features
 psi_scores <- bind_rows(lapply(config$protected, function(protected_feature) {
@@ -80,6 +77,7 @@ psi_scores <- bind_rows(lapply(config$protected, function(protected_feature) {
   }))
   return(psi_scores)
 }))
+write_data(psi_scores, 'psi_scores', config$project_name)
 
 # get the feature impact
 feature_impact = GetFeatureImpact(model)

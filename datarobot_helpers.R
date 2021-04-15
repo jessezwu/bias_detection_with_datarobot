@@ -146,3 +146,12 @@ getClassificationAccuracy <- function(merged_data, project, thresh) {
     extract2('confusion')
 }
 
+getOrCreateFeaturelist <- function(project, name, features) {
+  featurelists <- ListFeaturelists(project)
+  exists <- keep(featurelists, function(x) grepl(name, x$name))
+  if(length(exists) > 0) {
+    exists %>% extract2(1)
+  } else {
+    CreateFeaturelist(project, name, features)
+  }
+}

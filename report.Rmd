@@ -68,3 +68,11 @@ feature, against all other values.
 ```{r indirect_bias, message=FALSE}
 source('2_indirect_bias.R')
 ```
+
+# Remove indirect bias
+
+Remove the worst sources of indirect bias and run a new model.
+
+```{r remove_indirect, message=FALSE}
+source('3_remove_indirect_bias.R')
+```
