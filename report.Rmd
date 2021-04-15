@@ -21,6 +21,7 @@ library(anytime)
 library(ggrepel)
 library(ggwordcloud)
 library(yaml)
+library(DT)
 source('project_helpers.R')
 ```
 
@@ -75,4 +76,23 @@ Remove the worst sources of indirect bias and run a new model.
 
 ```{r remove_indirect, message=FALSE}
 source('3_remove_indirect_bias.R')
+```
+
+# Vary global threshold
+
+Investigate bias mitigation through different decision thresholds.
+
+```{r global_threshold, message=FALSE, warning=FALSE}
+source('4_vary_global_threshold.R')
+```
+
+# Vary class thresholds
+
+Apply different decision thresholds to each level of a protected feature to try
+and get absolute bias metrics as close as possible to those of the largest
+level.
+
+```{r class_thresholds, message=FALSE, warning=FALSE}
+source('5_vary_class_thresholds.R')
+DT::datatable(threshold_tables, rownames=FALSE, options=list(dom='t', scrollX = TRUE))
 ```

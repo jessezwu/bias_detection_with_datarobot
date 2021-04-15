@@ -57,6 +57,7 @@ for (feature in config$protected) {
       geom_histogram(position = "identity", bins = 30, alpha = 0.3) +
       theme_minimal() +
       scale_color_discrete(name = 'Class') +
+      scale_fill_discrete(name = 'Class') +
       ggtitle(paste('Predictions by', feature))
   print(plt)
   # plot trade off
