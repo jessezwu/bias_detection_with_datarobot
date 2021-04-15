@@ -101,3 +101,39 @@ for (protected_feature in config$protected) {
     print(plt)
   }
 }
+
+################################################################################
+
+# get the feature association matrix
+feature_association = GetFeatureAssociationMatrix(project, associationType = 'association', metric = 'mutualInfo')
+#
+# show the 5 strongest feature associations for each protected feature
+for (protected_feature in config$protected) {
+  strengths = feature_association$strengths %>%
+    filter(feature1 == protected_feature | feature2 == protected_feature) %>%
+    arrange(desc(statistic))
+  strengths = strengths %>%
+    top_n(5, statistic)
+  associated_features = sapply(seq_len(5), function(r)
+    return(ifelse(strengths$feature1[r] == strengths$feature2[r] | strengths$feature2[r] == protected_feature,
+                  strengths$feature1[r], strengths$feature2[r])))
+  strengths = feature_association$strengths %>%
+    filter(feature1 %in% associated_features & feature2 %in% associated_features) %>%
+    mutate(feature1 = factor(feature1, levels = associated_features)) %>%
+    mutate(feature2 = factor(feature2, levels = associated_features))
+  strengths2 = strengths %>%
+    rename(temp = feature1) %>%
+    rename(feature1 = feature2) %>%
+    rename(feature2 = temp) %>%
+    filter(feature1 != feature2)
+  strengths = bind_rows(list(strengths, strengths2)) %>%
+    rename(Association = statistic)
+  plt = ggplot(data = strengths, aes(x = feature1, y = feature2, fill = Association)) +
+    geom_tile() +
+    theme_minimal() +
+    scale_fill_gradientn(colours = c('grey', 'green', 'yellow', 'red')) +
+    ggtitle('Feature Associations', subtitle = paste0('Protected Feature = ', protected_feature)) +
+    xlab('Feature Name') +
+    ylab('Feature Name')
+  print(plt)
+}
