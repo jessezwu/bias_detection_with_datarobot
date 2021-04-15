@@ -55,4 +55,5 @@ features <- CreateFeaturelist(project, 'Protected Removed', no_protected)
 StartNewAutoPilot(project, features$featurelistId)
 WaitForAutopilot(project)
 
+project <- GetProject(project$projectId)
 write_project(project)

@@ -112,13 +112,13 @@ for (protected_feature in config$protected) {
   strengths <- feature_association$strengths %>%
     filter(feature1 == protected_feature | feature2 == protected_feature) %>%
     arrange(desc(statistic))
-  strengths <- strengths %>%
+  strengths %<>%
     top_n(5, statistic)
   associated_features <- append(
     strengths %>% extract2('feature1'),
     strengths %>% extract2('feature2')
   ) %>% unique
-  strengths = feature_association$strengths %>%
+  strengths <- feature_association$strengths %>%
     filter(feature1 %in% associated_features & feature2 %in% associated_features) %>%
     mutate(feature1 = factor(feature1, levels = associated_features)) %>%
     mutate(feature2 = factor(feature2, levels = associated_features))

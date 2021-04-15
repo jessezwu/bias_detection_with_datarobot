@@ -52,13 +52,15 @@ tryCatch({
 )
 ```
 
-# Accuracy and initial bias measurement
+# Model performance
 
-```{r acc_measure_bias, message=FALSE}
-source('1_measure_bias.R')
+Look at accuracy and bias measures.
+
+```{r performance, message=FALSE}
+source('1_performance.R')
 ```
 
-# Look for indirect bias
+# Indirect bias
 
 Investigate cross-class data disparity between a selected value of a protected
 feature, against all other values.

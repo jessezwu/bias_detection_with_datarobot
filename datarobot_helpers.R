@@ -1,4 +1,6 @@
 library(tidyverse)
+library(httr)
+library(magrittr)
 
 null.is.na <- function(x) { return(ifelse(is.null(x), NA, x))}
 
@@ -95,5 +97,52 @@ GetPayoffMatrix <- function(project, matrix_name) {
   } else {
     stop('The requested matrix does not exist')
   }
+}
+
+# pull target and prediction given project definitions
+getCleanedNames <- function(merged_data, project) {
+  merged_data %>%
+    mutate(
+      target = merged_data %>% extract2(project$target) == project$positiveClass,
+      probability = merged_data %>% extract2(paste0('class_', project$positiveClass))
+    )
+}
+
+# get the profit curve
+getProfitCurve <- function(merged_data, project, payoff_matrix) {
+  getCleanedNames(merged_data, project) %>%
+    arrange(probability) %>%
+    mutate(
+      positives = sum(target), # constant
+      negatives = sum(!target), # constant
+      cum_positives = cumsum(target),
+      cum_negatives = cumsum(!target)
+    ) %>%
+    group_by(probability) %>%
+    summarise(
+      tp = first(positives) - max(cum_positives), # positives > threshold
+      tn = max(cum_negatives),                    # negatives <= threshold
+      fp = first(negatives) - max(cum_negatives), # negatives > threshold
+      fn = max(cum_positives),                    # positives <= theshold
+      .groups = 'drop'
+    ) %>%
+    transmute(
+      threshold = probability,
+      profit =
+        payoff_matrix$truePositiveValue * tp +
+        payoff_matrix$trueNegativeValue * tn +
+        payoff_matrix$falsePositiveValue * fp +
+        payoff_matrix$falseNegativeValue * fn
+    )
+}
+
+# binary accuracy given a threshold
+getClassificationAccuracy <- function(merged_data, project, thresh) {
+  getCleanedNames(merged_data, project) %>%
+    mutate(confusion = ifelse(probability > thresh & target, 'TP', '')) %>%
+    mutate(confusion = ifelse(probability <= thresh & !target, 'TN', confusion)) %>%
+    mutate(confusion = ifelse(probability > thresh & !target, 'FP', confusion)) %>%
+    mutate(confusion = ifelse(probability <= thresh & target, 'FN', confusion)) %>%
+    extract2('confusion')
 }
 

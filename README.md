@@ -18,6 +18,16 @@ Currently assumes a binary classification problem.
 
 Project definitions should be defined in a yaml config file, e.g. `config/project_config.yaml`.
 
-TODO
+For an end to end report run
 
-Once satisfied, run `./generate_report.sh`
+```
+./generate_report.sh
+```
+
+To run individual components, first run setup, then run the scripts you are interested in. E.g.
+
+```
+R
+source('0_setup.R')
+source('<some file I want to run>')
+```

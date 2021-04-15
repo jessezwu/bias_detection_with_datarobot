@@ -2,14 +2,13 @@ library(datarobot)
 library(tidyverse)
 library(yaml)
 source('project_helpers.R')
-source('datarobot_helpers.R')
 source('bias_functions.R')
 
 config <- read_yaml('config/project_config.yaml')
 project <- load_project(config$project_name)
 
 ###########################################################################################
-# measure unfair bias in the base model without protected features
+# Model Performance
 ###########################################################################################
 
 best_model <- GetModelRecommendation(project, 'Recommended for Deployment')
@@ -20,6 +19,7 @@ roc_curve = GetRocCurve(model, DataPartition$VALIDATION, fallbackToParentInsight
 plot <- ggplot(roc_curve$rocPoints, aes(x=falsePositiveRate, y=truePositiveRate)) +
   geom_point() +
   geom_abline(intercept = 0) +
+  coord_fixed() +
   ggtitle('ROC Curve') +
   theme_minimal()
 print(plot)
@@ -46,7 +46,6 @@ training_data <- read_csv(config$filename)
 merged_data <- bind_cols(training_data, training_predictions)
 
 # get the profit curve
-project <- GetProject(project$projectId)   # make the project into a full project object
 profit_curve <- getProfitCurve(merged_data, project, payoff_matrix)
 optimal_threshold_for_profit <- profit_curve$threshold[which.max(profit_curve$profit)]
 plot <- ggplot(data = profit_curve, aes(x = threshold, y = profit)) +
@@ -57,17 +56,12 @@ plot <- ggplot(data = profit_curve, aes(x = threshold, y = profit)) +
 print(plot)
 cat('Optimal threshold for profit:', optimal_threshold_for_profit, '\n')
 
-#new <- merged_data %>%
-#  mutate(positiveResult = ifelse(
-#    !!as.name(paste0('class_', project$positiveClass)) <= optimal_threshold_for_profit,
-#    'Pos',
-#    'Neg')
-#  )
-
 # get the confusion matrix using the optimal threshold for profit
 print('Using the optimal threshold for profit')
 confusion_matrix <- getClassificationAccuracy(merged_data, project, optimal_threshold_for_profit)
 print(table(confusion_matrix))
+
+################################################################################
 
 # calculate fairness metrics using the optimal threshold for profit
 # https://app.datarobot.com/docs/modeling/investigate/bias/bias-ref.html#proportional-parity
