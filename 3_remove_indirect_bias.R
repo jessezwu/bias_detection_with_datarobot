@@ -8,7 +8,7 @@ config <- read_yaml('config/project_config.yaml')
 project <- load_project(config$project_name)
 
 ################################################################################
-# remove indirect bias
+# remove bias 1: remove indirect bias features
 ################################################################################
 
 tryCatch({
@@ -99,43 +99,43 @@ if(worst$mean_PSI > 0.25) {
   # show the effect of removing zip_code upon unfair bias metrics
   for (feature in config$protected) {
     # calculate and plot proportional parity
-    pp1 = getProportionalParity(merged_data, feature, optimal_threshold_for_profit)
-    pp2 = getProportionalParity(merged_data_V1, feature, optimal_threshold_for_profit_V1)
+    pp1 <- getProportionalParity(merged_data, feature, optimal_threshold_for_profit)
+    pp2 <- getProportionalParity(merged_data_V1, feature, optimal_threshold_for_profit_V1)
     plotProportionalParityComparison(pp1, 'Original', pp2, new_text)
 
     # calculate and plot equal parity
-    eqp1 = getEqualParity(merged_data, feature, optimal_threshold_for_profit)
-    eqp2 = getEqualParity(merged_data_V1, feature, optimal_threshold_for_profit_V1)
+    eqp1 <- getEqualParity(merged_data, feature, optimal_threshold_for_profit)
+    eqp2 <- getEqualParity(merged_data_V1, feature, optimal_threshold_for_profit_V1)
     plotEqualParityComparison(eqp1, 'Original', eqp2, new_text)
 
     # calculate and plot favorable class balance
-    fcb1 = getFavorableClassBalance(merged_data, feature, optimal_threshold_for_profit)
-    fcb2 = getFavorableClassBalance(merged_data_V1, feature, optimal_threshold_for_profit_V1)
+    fcb1 <- getFavorableClassBalance(merged_data, feature, optimal_threshold_for_profit)
+    fcb2 <- getFavorableClassBalance(merged_data_V1, feature, optimal_threshold_for_profit_V1)
     plotFavorableClassBalanceComparison(fcb1, 'Original', fcb2, new_text)
 
     # calculate and plot unfavorable class balance
-    ucb1 = getUnfavorableClassBalance(merged_data, feature, optimal_threshold_for_profit)
-    ucb2 = getUnfavorableClassBalance(merged_data_V1, feature, optimal_threshold_for_profit_V1)
+    ucb1 <- getUnfavorableClassBalance(merged_data, feature, optimal_threshold_for_profit)
+    ucb2 <- getUnfavorableClassBalance(merged_data_V1, feature, optimal_threshold_for_profit_V1)
     plotUnfavorableClassBalanceComparison(ucb1, 'Original', ucb2, new_text)
 
     # calculate and plot favorable rate parity
-    frp1 = getFavorableRateParity(merged_data, feature, optimal_threshold_for_profit, config)
-    frp2 = getFavorableRateParity(merged_data_V1, feature, optimal_threshold_for_profit_V1, config)
+    frp1 <- getFavorableRateParity(merged_data, feature, optimal_threshold_for_profit, config)
+    frp2 <- getFavorableRateParity(merged_data_V1, feature, optimal_threshold_for_profit_V1, config)
     plotFavorableRateParityComparison(frp1, 'Original', frp2, new_text)
 
     # calculate and plot unfavorable rate parity
-    urp1 = getUnfavorableRateParity(merged_data, feature, optimal_threshold_for_profit, config)
-    urp2 = getUnfavorableRateParity(merged_data_V1, feature, optimal_threshold_for_profit_V1, config)
+    urp1 <- getUnfavorableRateParity(merged_data, feature, optimal_threshold_for_profit, config)
+    urp2 <- getUnfavorableRateParity(merged_data_V1, feature, optimal_threshold_for_profit_V1, config)
     plotUnfavorableRateParityComparison(urp1, 'Original', urp2, new_text)
 
     # calculate and plot favorable predictive value parity
-    fpv1 = getFavorablePredictiveValueParity(merged_data, feature, optimal_threshold_for_profit, config)
-    fpv2 = getFavorablePredictiveValueParity(merged_data_V1, feature, optimal_threshold_for_profit_V1, config)
+    fpv1 <- getFavorablePredictiveValueParity(merged_data, feature, optimal_threshold_for_profit, config)
+    fpv2 <- getFavorablePredictiveValueParity(merged_data_V1, feature, optimal_threshold_for_profit_V1, config)
     plotFavorablePredictiveValueParityComparison(fpv1, 'Original', fpv2, new_text)
 
     # calculate and plot unfavorable rate parity
-    upv1 = getUnfavorablePredictiveValueParity(merged_data, feature, optimal_threshold_for_profit, config)
-    upv2 = getUnfavorablePredictiveValueParity(merged_data_V1, feature, optimal_threshold_for_profit_V1, config)
+    upv1 <- getUnfavorablePredictiveValueParity(merged_data, feature, optimal_threshold_for_profit, config)
+    upv2 <- getUnfavorablePredictiveValueParity(merged_data_V1, feature, optimal_threshold_for_profit_V1, config)
     plotUnfavorablePredictiveValueParityComparison(upv1, 'Original', upv2, new_text)
   }
 } else {

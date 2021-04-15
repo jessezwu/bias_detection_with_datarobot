@@ -14,11 +14,15 @@ project <- load_project(config$project_name)
 # get recommended model
 best_model <- GetModelRecommendation(project, 'Recommended for Deployment')
 model <- GetModel(best_model$projectId, best_model$modelId)
-# download the stacked predictions on the training data
-training_predictions <- getStackedPredictions(project, model)
-# merge the training predictions with the training data
-training_data <- read_csv(config$filename)
-merged_data <- bind_cols(training_data, training_predictions)
+
+merged_data <- tryCatch({
+  load_data('merged_data', config$project_name)
+}, error = function(e) {
+  training_data <- read_csv(config$filename)
+  training_predictions <- getStackedPredictions(project, model)
+  merged_data <- bind_cols(training_data, training_predictions)
+  write_data(merged_data, 'merged_data', config$project_name)
+})
 
 # get a list of the features used in our chosen model
 feature_list <- GetFeaturelist(project, model$featurelistId)

@@ -44,6 +44,7 @@ training_predictions <- getStackedPredictions(project, model)
 # merge the training predictions with the training data
 training_data <- read_csv(config$filename)
 merged_data <- bind_cols(training_data, training_predictions)
+write_data(merged_data, 'merged_data', config$project_name)
 
 # get the profit curve
 profit_curve <- getProfitCurve(merged_data, project, payoff_matrix)

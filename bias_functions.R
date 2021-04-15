@@ -416,16 +416,16 @@ toMetricName <- function(x) {
   )
   return(names[i])
 }
-calcBiasMetric <- function(fn, merged_data, protected_feature, thresh) {
+calcBiasMetric <- function(fn, merged_data, protected_feature, thresh, config) {
   if (length(thresh) > 1) return(calcBiasMetricMultiThresh(fn, merged_data, protected_feature, thresh))
   if (fn == 'getProportionalParity') return(getProportionalParity(merged_data, protected_feature, thresh))
   if (fn == 'getEqualParity') return(getEqualParity(merged_data, protected_feature, thresh))
   if (fn == 'getFavorableClassBalance') return(getFavorableClassBalance(merged_data, protected_feature, thresh))
   if (fn == 'getUnfavorableClassBalance') return(getUnfavorableClassBalance(merged_data, protected_feature, thresh))
-  if (fn == 'getFavorableRateParity') return(getFavorableRateParity(merged_data, protected_feature, thresh))
-  if (fn == 'getUnfavorableRateParity') return(getUnfavorableRateParity(merged_data, protected_feature, thresh))
-  if (fn == 'getFavorablePredictiveValueParity') return(getFavorablePredictiveValueParity(merged_data, protected_feature, thresh))
-  if (fn == 'getUnfavorablePredictiveValueParity') return(getUnfavorablePredictiveValueParity(merged_data, protected_feature, thresh))
+  if (fn == 'getFavorableRateParity') return(getFavorableRateParity(merged_data, protected_feature, thresh, config))
+  if (fn == 'getUnfavorableRateParity') return(getUnfavorableRateParity(merged_data, protected_feature, thresh, config))
+  if (fn == 'getFavorablePredictiveValueParity') return(getFavorablePredictiveValueParity(merged_data, protected_feature, thresh, config))
+  if (fn == 'getUnfavorablePredictiveValueParity') return(getUnfavorablePredictiveValueParity(merged_data, protected_feature, thresh, config))
   stop(paste0('Unknown function: ', fn))
 }
 calcBiasMetricMultiThresh <- function(fn, merged_data, protected_feature, thresh) {
@@ -440,10 +440,10 @@ calcBiasMetricMultiThresh <- function(fn, merged_data, protected_feature, thresh
   return(base_result)
 }
 
-getBiasMetricSummary <- function(merged_data, profit_curve, protected_feature) {
+getBiasMetricSummary <- function(merged_data, profit_curve, protected_feature, config) {
   bias_metric_summary = bind_rows(lapply(biasMetricFunctions, function(fn) {
     bias_temp = bind_rows(lapply(profit_curve$threshold, function(thresh) {
-      bias = calcBiasMetric(fn, merged_data, protected_feature, thresh) %>%
+      bias = calcBiasMetric(fn, merged_data, protected_feature, thresh, config) %>%
         filter(fairness != 'Not Enough Data')
       metric = names(bias)[3]
       if (nrow(bias) == 0) {
