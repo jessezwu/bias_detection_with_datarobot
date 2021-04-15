@@ -2,6 +2,7 @@ library(datarobot)
 library(tidyverse)
 library(yaml)
 source('project_helpers.R')
+source('datarobot_helpers.R')
 source('bias_functions.R')
 
 config <- read_yaml('config/project_config.yaml')
