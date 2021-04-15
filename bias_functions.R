@@ -276,14 +276,14 @@ getUnfavorablePredictiveValueParity <- function(merged_data, feature_name, thres
 
 ################################################################################
 # Plot PSI along with Feature Impact
-plotPSI <- function(plot_data) {
+plotPSI <- function(plot_data, feature, group) {
   ggplot(plot_data, aes(x = impactNormalized, y = PSI, colour = Impact, label = Feature)) +
     geom_point() +
     theme_minimal() +
     geom_text_repel(size = 2.5) +
     scale_colour_manual(values = c('green2', 'yellow3', 'red')) +
     ggtitle('Cross-Class Data Disparity',
-            subtitle = paste('Feature = ', protected_feature, '| Group = ', protected_group)) +
+            subtitle = paste('Feature =', feature, '| Group =', group)) +
     xlab('Importance') +
     ylab('Data Disparity')
 }

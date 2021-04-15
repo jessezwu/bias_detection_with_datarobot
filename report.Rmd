@@ -54,12 +54,15 @@ tryCatch({
 
 # Accuracy and initial bias measurement
 
-```{r acc_measure_bias}
+```{r acc_measure_bias, message=FALSE}
 source('1_measure_bias.R')
 ```
 
 # Look for indirect bias
 
-```{r indirect_bias}
+Investigate cross-class data disparity between a selected value of a protected
+feature, against all other values.
+
+```{r indirect_bias, message=FALSE}
 source('2_indirect_bias.R')
 ```

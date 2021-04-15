@@ -59,7 +59,7 @@ psi_scores <- bind_rows(lapply(config$protected, function(protected_feature) {
     if (engineered_date_features$period[r] == 'Month') test_data[, engineered_date_features$engineered[r]] = month(anydate(unname(unlist(test_data[, engineered_date_features$raw[r]]))))
     if (engineered_date_features$period[r] == 'Day') test_data[, engineered_date_features$engineered[r]] = day(anydate(unname(unlist(test_data[, engineered_date_features$raw[r]]))))
   }
-  group_levels = unique(unlist(test_data[, protected_feature]))
+  group_levels = test_data %>% extract2(protected_feature) %>% unique()
   psi_scores = bind_rows(lapply(group_levels, function(group) {
     test_data_1 = test_data %>% filter(!!as.name(protected_feature) == group)
     test_data_2 = test_data %>% filter(!!as.name(protected_feature) != group)
@@ -93,11 +93,11 @@ plot_data <- psi_scores %>%
   mutate(Impact = factor(Impact, levels = c('Low', 'Moderate', 'Major')))
 
 for (protected_feature in config$protected) {
-  group_levels <- merged_data %>% extract2('gender') %>% unique
+  group_levels <- merged_data %>% extract2(protected_feature) %>% unique
   for (protected_group in group_levels) {
     plt <- plot_data %>%
       filter(protected_feature == protected_feature, group_level == protected_group) %>%
-      plotPSI()
+      plotPSI(protected_feature, protected_group)
     print(plt)
   }
 }
@@ -109,29 +109,28 @@ feature_association = GetFeatureAssociationMatrix(project, associationType = 'as
 #
 # show the 5 strongest feature associations for each protected feature
 for (protected_feature in config$protected) {
-  strengths = feature_association$strengths %>%
+  strengths <- feature_association$strengths %>%
     filter(feature1 == protected_feature | feature2 == protected_feature) %>%
     arrange(desc(statistic))
-  strengths = strengths %>%
+  strengths <- strengths %>%
     top_n(5, statistic)
-  associated_features = sapply(seq_len(5), function(r)
-    return(ifelse(strengths$feature1[r] == strengths$feature2[r] | strengths$feature2[r] == protected_feature,
-                  strengths$feature1[r], strengths$feature2[r])))
+  associated_features <- append(
+    strengths %>% extract2('feature1'),
+    strengths %>% extract2('feature2')
+  ) %>% unique
   strengths = feature_association$strengths %>%
     filter(feature1 %in% associated_features & feature2 %in% associated_features) %>%
     mutate(feature1 = factor(feature1, levels = associated_features)) %>%
     mutate(feature2 = factor(feature2, levels = associated_features))
-  strengths2 = strengths %>%
-    rename(temp = feature1) %>%
-    rename(feature1 = feature2) %>%
-    rename(feature2 = temp) %>%
+  strengths2 <- strengths %>%
+    rename(feature1 = feature2, feature2 = feature1) %>%
     filter(feature1 != feature2)
-  strengths = bind_rows(list(strengths, strengths2)) %>%
+  strengths <- bind_rows(strengths, strengths2) %>%
     rename(Association = statistic)
-  plt = ggplot(data = strengths, aes(x = feature1, y = feature2, fill = Association)) +
+  plt <- ggplot(data = strengths, aes(x = feature1, y = feature2, fill = Association)) +
     geom_tile() +
     theme_minimal() +
-    scale_fill_gradientn(colours = c('grey', 'green', 'yellow', 'red')) +
+    scale_fill_gradientn(colours = c('white', 'green', 'yellow', 'red')) +
     ggtitle('Feature Associations', subtitle = paste0('Protected Feature = ', protected_feature)) +
     xlab('Feature Name') +
     ylab('Feature Name')
