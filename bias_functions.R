@@ -1,8 +1,6 @@
-##################################################
-#
-# Helper functions
-#
-##################################################
+################################################################################
+# Helper functions for bias detection and plots
+################################################################################
 library(tidyverse)
 library(magrittr)
 library(httr)
@@ -276,7 +274,21 @@ getUnfavorablePredictiveValueParity <- function(merged_data, feature_name, thres
                          relative_unfavorable_predictive_value_parity, fairness))
 }
 
-#####################################################################################################################
+################################################################################
+# Plot PSI along with Feature Impact
+plotPSI <- function(plot_data) {
+  ggplot(plot_data, aes(x = impactNormalized, y = PSI, colour = Impact, label = Feature)) +
+    geom_point() +
+    theme_minimal() +
+    geom_text_repel(size = 2.5) +
+    scale_colour_manual(values = c('green2', 'yellow3', 'red')) +
+    ggtitle('Cross-Class Data Disparity',
+            subtitle = paste('Feature = ', protected_feature, '| Group = ', protected_group)) +
+    xlab('Importance') +
+    ylab('Data Disparity')
+}
+
+################################################################################
 # generic purpose function for plotting fairness metrics
 # is called by wrapper functions specific to a type of metric
 plotFairnessMetric <- function(dat, title, metric, metric_name, feature_name) {
