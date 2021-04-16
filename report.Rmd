@@ -70,6 +70,15 @@ feature, against all other values.
 source('2_indirect_bias.R')
 ```
 
+# Indirect projects
+
+Build models to predict protected features, and identify indirect proxies
+through feature impact (and text features if they exist).
+
+```{r predict_protected, message=FALSE}
+source('9_predict_protected.R')
+```
+
 # Remove indirect bias
 
 Remove the worst sources of indirect bias and run a new model.
@@ -94,5 +103,14 @@ level.
 
 ```{r class_thresholds, message=FALSE, warning=FALSE}
 source('5_vary_class_thresholds.R')
-DT::datatable(threshold_tables, rownames=FALSE, options=list(dom='t', scrollX = TRUE))
+DT::datatable(threshold_tables, rownames=FALSE, options=list(dom='t', scrollX = TRUE)) %>%
+  formatRound(2:9, digits=3)
+```
+
+# Reweighting
+
+See also this [blog post](https://towardsdatascience.com/reweighing-the-adult-dataset-to-make-it-discrimination-free-44668c9379e8).
+
+```{r reweighting, message=FALSE, warning=FALSE}
+source('6_reweighting.R')
 ```

@@ -9,7 +9,7 @@ config <- read_yaml('config/project_config.yaml')
 project <- load_project(config$project_name)
 
 ################################################################################
-# remove bias 3: vary decision threshold separately for each protected class
+# remove bias: vary decision threshold separately for each protected class
 ################################################################################
 
 merged_data <- tryCatch({

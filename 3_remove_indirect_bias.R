@@ -8,7 +8,7 @@ config <- read_yaml('config/project_config.yaml')
 project <- load_project(config$project_name)
 
 ################################################################################
-# remove bias 1: remove indirect bias features
+# remove bias: remove indirect bias features
 ################################################################################
 
 tryCatch({

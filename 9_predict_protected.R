@@ -1,10 +1,11 @@
 library(datarobot)
-library(tidyverse) library(yaml)
+library(tidyverse)
+library(yaml)
 source('project_helpers.R')
-source('datarobot_helpers.R')
 source('bias_functions.R')
 
 config <- read_yaml('config/project_config.yaml')
+project <- load_project(config$project_name)
 
 ################################################################################
 # create separate DR projects that predict the protected features,
@@ -14,46 +15,52 @@ config <- read_yaml('config/project_config.yaml')
 merged_data <- tryCatch({
   load_data('merged_data', config$project_name)
 }, error = function(e) {
-  best_model <- GetModelRecommendation(project, 'Recommended for Deployment')
-  model <- GetModel(best_model$projectId, best_model$modelId)
   training_data <- read_csv(config$filename)
   training_predictions <- getStackedPredictions(project, model)
   merged_data <- bind_cols(training_data, training_predictions)
   write_data(merged_data, 'merged_data', config$project_name)
 })
 
-training_data <- read_csv(config$filename)
+# read existing projects if they exist
+tryCatch({
+  indirect_projects <- readRDS(file.path('config', paste(config$project_name, 'indirect_projects.RDS')))
+  indirect_protected <- readRDS(file.path('config', paste(config$project_name, 'indirect_protected.RDS')))
+  indirect_group <- readRDS(file.path('config', paste(config$project_name, 'indirect_group.RDS')))
+}, error = function(e) {
+  # if not yet created, start projects for each protected feature
+  # start by getting previous featurelist
+  best_model <- GetModelRecommendation(project, 'Recommended for Deployment')
+  model <- GetModel(best_model$projectId, best_model$modelId)
+  training_data <- read_csv(config$filename)
+  feature_list = GetFeaturelist(project, model$featurelistId)
+  input_features = feature_list$features
+  # get the EDA
+  eda_summary = ListFeatureInfo(project)
+  eda_table = featureinfolist.as.data.frame(eda_summary)
+  date_features = unname(unlist(eda_table %>% filter(featureType == 'Date') %>% select(name)))
+  text_features = unname(unlist(eda_table %>% filter(featureType == 'Text') %>% select(name)))
+  engineered_date_features = bind_rows(lapply(
+              c('Year', 'Month', 'Day', 'Hour'),
+              function(x) return(tibble(raw = date_features, engineered = paste0(date_features, ' (', x, ')'), period = x)))) %>%
+          filter(engineered %in% input_features)
+  raw_features = input_features
+  for (r in seq_len(nrow(engineered_date_features)))
+    raw_features = gsub(engineered_date_features$engineered[r], engineered_date_features$raw[r], raw_features, fixed = TRUE)
+  raw_features = unique(raw_features)
 
-indirect_projects <- list()
-indirect_protected <- list()
-indirect_group <- list()
-for (protected_feature in config$protected) {
-  group_list <- training_data %>% extract2(protected_feature) %>% unique
-  if (length(group_list) == 2) {
-    target_group = head(group_list, 1)
-    temp_data = merged_data %>%
-      select(all_of(c(raw_features, protected_feature)))
-    prj = StartProject(dataSource = temp_data,
-                       projectName = paste0('Find indirect bias - ', protected_feature),
-                       target = protected_feature,
-                       positiveClass = target_group,
-                       mode = 'quick',
-                       workerCount = 'max')
-    i = 1 + length(indirect_projects)
-    indirect_projects[[i]] = prj
-    indirect_protected[[i]] = protected_feature
-    indirect_group[[i]] = target_group
-  }
-  if (length(group_list) > 2) {
-    for (target_group in group_list) {
+  # loop through to generate projects
+  indirect_projects <- list()
+  indirect_protected <- list()
+  indirect_group <- list()
+  for (protected_feature in config$protected) {
+    group_list <- training_data %>% extract2(protected_feature) %>% unique
+    if (length(group_list) == 2) {
+      target_group = head(group_list, 1)
       temp_data = merged_data %>%
-        select(all_of(c(raw_features, protected_feature))) %>%
-        mutate(target_protected_group = ifelse(!!as.name(protected_feature) == target_group, target_group, 'all_others')) %>%
-        select(-all_of(protected_feature))
-
+        select(all_of(c(raw_features, protected_feature)))
       prj = StartProject(dataSource = temp_data,
-                         projectName = paste0('Find indirect bias - ', protected_feature, ' - ', target_group),
-                         target = 'target_protected_group',
+                         projectName = paste0('Find indirect bias - ', protected_feature),
+                         target = protected_feature,
                          positiveClass = target_group,
                          mode = 'quick',
                          workerCount = 'max')
@@ -62,9 +69,31 @@ for (protected_feature in config$protected) {
       indirect_protected[[i]] = protected_feature
       indirect_group[[i]] = target_group
     }
+    if (length(group_list) > 2) {
+      for (target_group in group_list) {
+        temp_data = merged_data %>%
+          select(all_of(c(raw_features, protected_feature))) %>%
+          mutate(target_protected_group = ifelse(!!as.name(protected_feature) == target_group, target_group, 'all_others')) %>%
+          select(-all_of(protected_feature))
+
+        prj = StartProject(dataSource = temp_data,
+                           projectName = paste0('Find indirect bias - ', protected_feature, ' - ', target_group),
+                           target = 'target_protected_group',
+                           positiveClass = target_group,
+                           mode = 'quick',
+                           workerCount = 'max')
+        i = 1 + length(indirect_projects)
+        indirect_projects[[i]] = prj
+        indirect_protected[[i]] = protected_feature
+        indirect_group[[i]] = target_group
+      }
+    }
   }
-}
-for (prj in indirect_projects) WaitForAutopilot(prj)
+  for (prj in indirect_projects) WaitForAutopilot(prj)
+  saveRDS(indirect_projects, file.path('config', paste(config$project_name, 'indirect_projects.RDS')))
+  saveRDS(indirect_protected, file.path('config', paste(config$project_name, 'indirect_protected.RDS')))
+  saveRDS(indirect_group, file.path('config', paste(config$project_name, 'indirect_group.RDS')))
+})
 
 # get insights from the projects we just built
 for (i in seq_len(length(indirect_projects))) {
@@ -72,22 +101,23 @@ for (i in seq_len(length(indirect_projects))) {
   protected_feature = indirect_protected[[i]]
   protected_group = indirect_group[[i]]
   cat(paste0('Analysing feature: ', protected_feature, ' and group: ', protected_group, '\n'))
-  #
+
   # get the top model
   indirect_leaderboard = as.data.frame(ListModels(prj))
   indirect_top_model = GetModel(prj, head(indirect_leaderboard$modelId[! grepl('Blender', indirect_leaderboard$modelType)], 1))
-  #
+
   # get the feature impact, identifying possible proxies
   indirect_feature_impact = GetFeatureImpact(indirect_top_model)
   indirect_feature_impact = indirect_feature_impact %>% mutate(featureName = factor(featureName, levels = rev(indirect_feature_impact$featureName)))
   plt = ggplot(data = indirect_feature_impact, aes(x = featureName, y = impactNormalized)) +
     geom_col() +
     coord_flip() +
-    ggtitle('Feature Impact', subtitle = paste0('Potential proxies for: ', protected_feature, ' and group: ', protected_group)) +
+    theme_minimal() +
+    ggtitle('Feature Impact', subtitle = paste0('Potential proxies for feature: ', protected_feature, ' and group: ', protected_group)) +
     xlab('Feature Name') +
     ylab('Feature Impact')
   print(plt)
-  #
+
   # for each text feature show the wordcloud
   indirect_text_models = indirect_leaderboard %>% filter(grepl('Auto-Tuned Word N-Gram Text Modeler', modelType))
   indirect_text_models = indirect_text_models %>% filter(samplePct == max(indirect_text_models$samplePct))

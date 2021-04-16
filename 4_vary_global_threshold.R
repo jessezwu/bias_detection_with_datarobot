@@ -8,7 +8,7 @@ config <- read_yaml('config/project_config.yaml')
 project <- load_project(config$project_name)
 
 ################################################################################
-# remove bias 2: vary the global decision threshold
+# remove bias: vary the global decision threshold
 ################################################################################
 
 merged_data <- tryCatch({
