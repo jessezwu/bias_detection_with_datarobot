@@ -53,7 +53,9 @@ tryCatch({
 )
 ```
 
-# Model performance
+# Bias Detection
+
+## Model performance
 
 Look at accuracy and bias measures.
 
@@ -61,7 +63,7 @@ Look at accuracy and bias measures.
 source('1_performance.R')
 ```
 
-# Indirect bias
+## Indirect bias
 
 Investigate cross-class data disparity between a selected value of a protected
 feature, against all other values.
@@ -70,7 +72,7 @@ feature, against all other values.
 source('2_indirect_bias.R')
 ```
 
-# Indirect projects
+## Indirect projects
 
 Build models to predict protected features, and identify indirect proxies
 through feature impact (and text features if they exist).
@@ -79,15 +81,17 @@ through feature impact (and text features if they exist).
 source('9_predict_protected.R')
 ```
 
-# Remove indirect bias
+# Bias Mitigation
 
-Remove the worst sources of indirect bias and run a new model.
+## Remove indirect bias
+
+Remove the worst sources of indirect bias using PSI only and run a new model.
 
 ```{r remove_indirect, message=FALSE}
 source('3_remove_indirect_bias.R')
 ```
 
-# Vary global threshold
+## Vary global threshold
 
 Investigate bias mitigation through different decision thresholds.
 
@@ -95,7 +99,7 @@ Investigate bias mitigation through different decision thresholds.
 source('4_vary_global_threshold.R')
 ```
 
-# Vary class thresholds
+## Vary class thresholds
 
 Apply different decision thresholds to each level of a protected feature to try
 and get absolute bias metrics as close as possible to those of the largest
@@ -107,7 +111,7 @@ DT::datatable(threshold_tables, rownames=FALSE, options=list(dom='t', scrollX = 
   formatRound(2:9, digits=3)
 ```
 
-# Reweighting
+## Reweighting
 
 See also this [blog post](https://towardsdatascience.com/reweighing-the-adult-dataset-to-make-it-discrimination-free-44668c9379e8).
 
