@@ -2,6 +2,7 @@ install.packages(c(
   'anytime',
   'creditmodel',
   'datarobot',
+  'DT',
   'ggplot2',
   'ggrepel',
   'ggwordcloud',

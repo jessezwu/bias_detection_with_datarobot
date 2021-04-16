@@ -18,7 +18,7 @@ Currently assumes a binary classification problem.
 
 Project definitions should be defined in a yaml config file, e.g. `config/project_config.yaml`.
 
-For an end to end report run
+For an end to end html report run
 
 ```
 ./generate_report.sh
