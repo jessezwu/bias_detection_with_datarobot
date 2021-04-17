@@ -22,7 +22,7 @@ merged_data <- tryCatch({
 })
 
 # read existing projects if they exist
-tryCatch({
+suppressWarnings(tryCatch({
   indirect_projects <- readRDS(file.path('config', paste(config$project_name, 'indirect_projects.RDS')))
   indirect_protected <- readRDS(file.path('config', paste(config$project_name, 'indirect_protected.RDS')))
   indirect_group <- readRDS(file.path('config', paste(config$project_name, 'indirect_group.RDS')))
@@ -93,7 +93,12 @@ tryCatch({
   saveRDS(indirect_projects, file.path('config', paste(config$project_name, 'indirect_projects.RDS')))
   saveRDS(indirect_protected, file.path('config', paste(config$project_name, 'indirect_protected.RDS')))
   saveRDS(indirect_group, file.path('config', paste(config$project_name, 'indirect_group.RDS')))
-})
+}))
+
+# ensure objects exist in memory
+indirect_projects <- readRDS(file.path('config', paste(config$project_name, 'indirect_projects.RDS')))
+indirect_protected <- readRDS(file.path('config', paste(config$project_name, 'indirect_protected.RDS')))
+indirect_group <- readRDS(file.path('config', paste(config$project_name, 'indirect_group.RDS')))
 
 # get insights from the projects we just built
 for (i in seq_len(length(indirect_projects))) {
