@@ -62,8 +62,8 @@ weighted_data <- weights_table %>%
 
 # step 5: build a new project with this weighted dataset
 project_name <- paste(config$project_name, '- Reweighting')
-tryCatch({
-    project_reweighted <- load_project(project_name)
+project_reweighted <- tryCatch({
+    load_project(project_name)
   }, error = function(e) {
     best_model <- GetModelRecommendation(project, 'Recommended for Deployment')
     model <- GetModel(best_model$projectId, best_model$modelId)
@@ -93,6 +93,7 @@ tryCatch({
     UpdateProject(project_reweighted, workerCount = 'max')
     WaitForAutopilot(project_reweighted)
     write_project(project_reweighted)
+    project_reweighted
 })
 
 # download the stacked predictions on the weighted training data

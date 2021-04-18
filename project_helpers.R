@@ -22,7 +22,7 @@ load_data <- function(name, project, data_dir = 'data') {
       read_csv(file.path(data_dir, project, paste0(name, '.csv')))
     },
     error = function(e) {
-      print("Dataset doesn't exist!")
+      print("Dataset doesn't exist, will need to be created.")
       stop()
   })
 }
