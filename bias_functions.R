@@ -275,8 +275,7 @@ plotEqualParity <- function(dat, feature_name, title = 'Equal Parity', absolute 
                      feature_name = feature_name)
 }
 # plot favorable class balance
-plotFavorableClassBalance <- function(dat, feature_name, title = 'Favorable
-                                     Class Balance', absolute = TRUE) {
+plotFavorableClassBalance <- function(dat, feature_name, title = 'Favorable Class Balance', absolute = TRUE) {
   prefix = ifelse(absolute, 'Absolute', 'Relative')
   metric_name = paste0(prefix, ' ', title)
   plotFairnessMetric(dat, title,

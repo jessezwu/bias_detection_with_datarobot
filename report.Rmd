@@ -53,6 +53,15 @@ tryCatch({
 )
 ```
 
+# Effect of Protected Features
+
+Investigate impacts on performance (profit) and fairness (equal opportunity)
+through the removal of protected features one at a time.
+
+```{r leave_one_out, message=FALSE}
+source('1_leave_one_out.R')
+```
+
 # Bias Detection
 
 ## Model performance
@@ -60,7 +69,7 @@ tryCatch({
 Look at accuracy and bias measures.
 
 ```{r performance, message=FALSE}
-source('1_performance.R')
+source('2_performance.R')
 ```
 
 ## Indirect bias
@@ -69,7 +78,7 @@ Investigate cross-class data disparity between a selected value of a protected
 feature, against all other values.
 
 ```{r indirect_bias, message=FALSE}
-source('2_indirect_bias.R')
+source('31_indirect_bias.R')
 ```
 
 ## Indirect projects
@@ -78,7 +87,7 @@ Build models to predict protected features, and identify indirect proxies
 through feature impact (and text features if they exist).
 
 ```{r predict_protected, message=FALSE}
-source('9_predict_protected.R')
+source('32_predict_protected.R')
 ```
 
 # Bias Mitigation
@@ -88,7 +97,7 @@ source('9_predict_protected.R')
 Remove the worst sources of indirect bias using PSI only and run a new model.
 
 ```{r remove_indirect, message=FALSE}
-source('3_remove_indirect_bias.R')
+source('41_remove_indirect_bias.R')
 ```
 
 ## Vary global threshold
@@ -96,7 +105,7 @@ source('3_remove_indirect_bias.R')
 Investigate bias mitigation through different decision thresholds.
 
 ```{r global_threshold, message=FALSE, warning=FALSE}
-source('4_vary_global_threshold.R')
+source('42_vary_global_threshold.R')
 ```
 
 ## Vary class thresholds
@@ -106,7 +115,7 @@ and get absolute bias metrics as close as possible to those of the largest
 level.
 
 ```{r class_thresholds, message=FALSE, warning=FALSE}
-source('5_vary_class_thresholds.R')
+source('43_vary_class_thresholds.R')
 DT::datatable(threshold_tables, rownames=FALSE, options=list(dom='t', scrollX = TRUE)) %>%
   formatRound(2:9, digits=3)
 ```
@@ -116,5 +125,5 @@ DT::datatable(threshold_tables, rownames=FALSE, options=list(dom='t', scrollX = 
 See also this [blog post](https://towardsdatascience.com/reweighing-the-adult-dataset-to-make-it-discrimination-free-44668c9379e8).
 
 ```{r reweighting, message=FALSE, warning=FALSE}
-source('6_reweighting.R')
+source('44_reweighting.R')
 ```

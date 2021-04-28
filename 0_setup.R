@@ -11,7 +11,7 @@ config <- read_yaml('config/project_config.yaml')
 ################################################################################
 
 # upload dataset to create a project
-project <- SetupProject(config$filename, 'Bias Demo')
+project <- SetupProject(config$filename, config$project_name)
 
 # project settings, note bias and fairness is currently only supported through the REST API
 # for documentation, see:
