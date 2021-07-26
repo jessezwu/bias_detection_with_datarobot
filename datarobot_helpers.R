@@ -57,6 +57,10 @@ featureinfolist.as.data.frame <- function(x) {
 # stacked predictions for a model
 getStackedPredictions <- function(project, model) {
   predictions <- ListTrainingPredictions(project)
+  UpdateProject(
+    project=project,
+    holdoutUnlocked = TRUE
+  )
   predictionId <- unlist(lapply(predictions, function(x)
     if(x$modelId == model$modelId && x$dataSubset == 'all') return(x$id) else return(NULL)))
   if (length(predictionId) == 0) {
