@@ -3,6 +3,7 @@ library(tidyverse)
 library(yaml)
 source('project_helpers.R')
 source('bias_functions.R')
+source('plot_functions.R')
 
 config <- read_yaml('config/project_config.yaml')
 project <- load_project(config$project_name)

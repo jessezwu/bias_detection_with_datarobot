@@ -4,6 +4,7 @@ library(yaml)
 library(DT)
 source('project_helpers.R')
 source('bias_functions.R')
+source('per_class_threshold_table.R')
 
 config <- read_yaml('config/project_config.yaml')
 project <- load_project(config$project_name)
