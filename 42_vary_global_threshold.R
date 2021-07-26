@@ -42,7 +42,7 @@ bias_metric_summary <- tryCatch({
     load_data('bias_metric_summary', config$project_name)
   }, error = function(e) {
     bias_metric_summary <- bind_rows(lapply(config$protected, function(protected_feature) {
-      getBiasMetricSummary(merged_data, profit_curve, protected_feature, config)
+      getBiasMetricSummary(merged_data, profit_curve, 'probability', protected_feature, config$target, config$preferable_outcome)
     }))
     write_data(bias_metric_summary, 'bias_metric_summary', config$project_name)
     bias_metric_summary

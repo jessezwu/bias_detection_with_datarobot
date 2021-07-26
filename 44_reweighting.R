@@ -126,6 +126,6 @@ plt <- ggplot(data = profit_curve, aes(x = threshold, y = profit)) +
 print(plt)
 
 # step 7: show proportional parity
-pp <- getProportionalParity(merged_data, protected, optimal_threshold_for_profit)
+pp <- getProportionalParity(merged_data, 'probability', protected, optimal_threshold_for_profit)
 plotProportionalParity(pp, protected)
 

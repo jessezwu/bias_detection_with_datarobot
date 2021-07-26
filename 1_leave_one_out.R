@@ -95,7 +95,7 @@ summariseFairness <- function(data, colname) {
 }
 
 for (feature in config$protected) {
-  data <- getFavorableClassBalance(baseline_data, feature, baseline_threshold)
+  data <- getFavorableClassBalance(baseline_data, 'probability', feature, baseline_threshold)
   baseline_fairness <- summariseFairness(data, 'relative_favorable_class_balance')
 
   new_featurelist <- tryCatch({
@@ -123,7 +123,7 @@ for (feature in config$protected) {
   new_threshold <- new_profit_curve$threshold[which.max(new_profit_curve$profit)]
   new_profit <- max(new_profit_curve$profit)
 
-  data <- getFavorableClassBalance(new_data, feature, new_threshold)
+  data <- getFavorableClassBalance(new_data, 'probability', feature, new_threshold)
   new_fairness <- summariseFairness(data, 'relative_favorable_class_balance')
 
   change <- function(new, old) {

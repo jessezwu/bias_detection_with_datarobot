@@ -71,49 +71,49 @@ print(table(confusion_matrix))
 
 # calculate and plot proportional parity
 for (feature in config$protected) {
-  pp <- getProportionalParity(merged_data, feature, optimal_threshold_for_profit)
+  pp <- getProportionalParity(merged_data, 'probability', feature, optimal_threshold_for_profit)
   plotProportionalParity(pp, feature)
 }
 
 # calculate and plot equal parity
 for (feature in config$protected) {
-  eqp <- getEqualParity(merged_data, feature, optimal_threshold_for_profit)
+  eqp <- getEqualParity(merged_data, 'probability', feature, optimal_threshold_for_profit)
   plotEqualParity(eqp, feature)
 }
 
 # calculate and plot favorable class balance
 for (feature in config$protected) {
-  fcb <- getFavorableClassBalance(merged_data, feature, optimal_threshold_for_profit)
+  fcb <- getFavorableClassBalance(merged_data, 'probability', feature, optimal_threshold_for_profit)
   plotFavorableClassBalance(fcb, feature)
 }
 
 # calculate and plot favorable class balance
 for (feature in config$protected) {
-  ucb <- getUnfavorableClassBalance(merged_data, feature, optimal_threshold_for_profit)
+  ucb <- getUnfavorableClassBalance(merged_data, 'probability', feature, optimal_threshold_for_profit)
   plotUnfavorableClassBalance(ucb, feature)
 }
 
 # calculate and plot true favorable rate parity
 for (feature in config$protected) {
-  frp <- getFavorableRateParity(merged_data, feature, optimal_threshold_for_profit, config)
+  frp <- getFavorableRateParity(merged_data, 'probability', feature, optimal_threshold_for_profit, config$target, config$preferable_outcome)
   plotFavorableRateParity(frp, feature)
 }
 
 # calculate and plot true unfavorable rate parity
 for (feature in config$protected) {
-  urp <- getUnfavorableRateParity(merged_data, feature, optimal_threshold_for_profit, config)
+  urp <- getUnfavorableRateParity(merged_data, 'probability', feature, optimal_threshold_for_profit, config$target, config$preferable_outcome)
   plotUnfavorableRateParity(urp, feature)
 }
 
 # calculate and plot favorable predictive value parity
 for (feature in config$protected) {
-  pvp <- getFavorablePredictiveValueParity(merged_data, feature, optimal_threshold_for_profit, config)
+  pvp <- getFavorablePredictiveValueParity(merged_data, 'probability', feature, optimal_threshold_for_profit, config$target, config$preferable_outcome)
   plotFavorablePredictiveValueParity(pvp, feature)
 }
 
 # calculate and plot unfavorable predictive value parity
 for (feature in config$protected) {
-  upvp <- getUnfavorablePredictiveValueParity(merged_data, feature, optimal_threshold_for_profit, config)
+  upvp <- getUnfavorablePredictiveValueParity(merged_data, 'probability', feature, optimal_threshold_for_profit, config$target, config$preferable_outcome)
   plotUnfavorablePredictiveValueParity(upvp, feature)
 }
 
